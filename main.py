@@ -2,6 +2,7 @@ import struct as st
 import numpy as np
 np.set_printoptions(linewidth=1000)
 
+
 def read_mnist(no_items_each):
     data_locations = {
         "testing": {"data": "data/t10k-images-idx3-ubyte", "labels": "data/t10k-labels-idx1-ubyte"},
@@ -49,23 +50,20 @@ def read_mnist(no_items_each):
     return formatted_data
 
 
-mnist = read_mnist(100)
-
-X_train = mnist["training"]["data"]
-y_train = mnist["training"]["labels"]
-X_test = mnist["testing"]["data"]
-y_test = mnist["testing"]["labels"]
-
-weight = np.array((np.random.uniform(low=-1, high=1, size=54880).reshape(70, 784),  # weights are a random number
-                   np.random.uniform(low=-1, high=1, size=1400).reshape(20, 70),    # between 1 and 0
-                   np.random.uniform(low=-1, high=1, size=200).reshape(10, 20)))
-bias = np.array((np.random.uniform(low=0, high=1, size=(70, 1)),   # biases are a random number between 1 and 0
-                 np.random.uniform(low=0, high=1, size=(20, 1)),   # implementing all column vectors as
-                 np.random.uniform(low=0, high=1, size=(10, 1))))  # number x 1 matrices
-activation = np.array((np.zeros(shape=(784, 1)),
-                       np.zeros(shape=(70, 1)),
-                       np.zeros(shape=(20, 1)),
-                       np.zeros(shape=(10, 1))))
+def create_network():
+    global weight
+    global bias
+    global activation
+    weight = np.array((np.random.uniform(low=-1, high=1, size=54880).reshape(70, 784),  # weights are a random number
+                       np.random.uniform(low=-1, high=1, size=1400).reshape(20, 70),    # between 1 and 0
+                       np.random.uniform(low=-1, high=1, size=200).reshape(10, 20)))
+    bias = np.array((np.random.uniform(low=0, high=1, size=(70, 1)),   # biases are a random number between 1 and 0
+                     np.random.uniform(low=0, high=1, size=(20, 1)),   # implementing all column vectors as
+                     np.random.uniform(low=0, high=1, size=(10, 1))))  # number x 1 matrices
+    activation = np.array((np.zeros(shape=(784, 1)),
+                           np.zeros(shape=(70, 1)),
+                           np.zeros(shape=(20, 1)),
+                           np.zeros(shape=(10, 1))))
 
 
 def normalize_inputs(data):
@@ -77,13 +75,32 @@ def sigmoid(x):
 
 
 def feed_forward(X):
-    activation[0] = normalize_inputs(X).reshape(784, 1)
+    activation[0] = normalize_inputs(X).reshape(784, 1)  # squashes all initial activations between 1 and 0
 
     for x in range(0, 2+1):  # loop from the first layer to the one before the last (as I will calc next activations)
         weighted_sum = np.dot(weight[x], activation[x]) + bias[x]
-        activation[x+1] = sigmoid(weighted_sum)
+        activation[x+1] = sigmoid(weighted_sum)  # changes the activation of the next layer
 
 
+def reformat_desired_output(x):  # ex: re-formats a desired output from 3 to [0, 0, 0, 1, 0, 0, 0, 0, 0, 0] for MSSE
+    y = np.zeros(shape=10)
+    y[x] = 1
+    return y.reshape(10, 1)
+
+
+def mean_sum_squared_errors(X, y):  # returns mean sum of the squared errors w/ outputs from feedforward and desired
+    y = reformat_desired_output(y)
+    return (np.sum(a=pow((X-y), 2), axis=0) / 10)[0]
+
+
+mnist = read_mnist(100)
+
+X_train = mnist["training"]["data"]
+y_train = mnist["training"]["labels"]
+X_test = mnist["testing"]["data"]
+y_test = mnist["testing"]["labels"]
+
+create_network()
 feed_forward(X_train[0])
 
-print(activation[3])
+print(mean_sum_squared_errors(activation[3], y_train[0]))
