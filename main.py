@@ -1,38 +1,60 @@
 import struct as st
 import numpy as np
+import pdb
 np.set_printoptions(linewidth=1000)
 
 class MLP:
 
     def __init__(self):
-        self.weight = np.array((np.random.uniform(low=-1, high=1, size=54880).reshape(70, 784),  # weights are a random number
-                       np.random.uniform(low=-1, high=1, size=1400).reshape(20, 70),    # between 1 and 0
-                       np.random.uniform(low=-1, high=1, size=200).reshape(10, 20)))
-        self.bias = np.array((np.random.uniform(low=0, high=1, size=(70, 1)),   # biases are a random number between 1 and 0
-                        np.random.uniform(low=0, high=1, size=(20, 1)),   # implementing all column vectors as
-                        np.random.uniform(low=0, high=1, size=(10, 1))))  # number x 1 matrices
-        self.weighted_sum = np.array((np.zeros(shape=(70, 1)),
-                                np.zeros(shape=(20, 1)),
-                                np.zeros(shape=(10, 1))))
+        self.NUMBER_OF_LAYERS = 3
+        
+        self.weight = np.array([
+            np.random.uniform(low=-1, high=1, size=(70, 784)),  # weights are a random number between -1 and 1
+            np.random.uniform(low=-1, high=1, size=(20, 70)), 
+            np.random.uniform(low=-1, high=1, size=(10, 20))
+            ])
 
-        self.activation = np.array((np.zeros(shape=(784, 1)),
-                            np.zeros(shape=(70, 1)),
-                            np.zeros(shape=(20, 1)),
-                            np.zeros(shape=(10, 1))))
+        self.bias = np.array([
+            np.random.uniform(low=-1, high=1, size=(70, 1)),   # biases are a random number between -1 and 1
+            np.random.uniform(low=-1, high=1, size=(20, 1)),   # implementing all column vectors as
+            np.random.uniform(low=-1, high=1, size=(10, 1))    # number x 1 matrices   
+            ])  
+        
+        self.weighted_sum = np.array([
+            np.zeros(shape=(70, 1)),
+            np.zeros(shape=(20, 1)),
+            np.zeros(shape=(10, 1))
+            ])
 
-        self.weight_gradient = np.array((np.zeros(shape=54880).reshape(70, 784),
-                                    np.zeros(shape=1400).reshape(20, 70),
-                                    np.zeros(shape=200).reshape(10, 20)))
-        self.bias_gradient = np.array((np.zeros(shape=(70, 1)),
-                                np.zeros(shape=(20, 1)),
-                                np.zeros(shape=(10, 1))))
-        self.activation_gradient = np.array((np.zeros(shape=(784, 1)),
-                                        np.zeros(shape=(70, 1)),
-                                        np.zeros(shape=(20, 1)),
-                                        np.zeros(shape=(10, 1))))
+        self.activation = np.array([
+            np.zeros(shape=(784, 1)),
+            np.zeros(shape=(70, 1)),
+            np.zeros(shape=(20, 1)),
+            np.zeros(shape=(10, 1))
+            ])
+
+        self.weight_gradient = np.array([
+            np.zeros(shape=(70, 784)),
+            np.zeros(shape=(20, 70)),
+            np.zeros(shape=(10, 20))
+            ])
+        
+        self.bias_gradient = np.array([
+            np.zeros(shape=(70, 1)),
+            np.zeros(shape=(20, 1)),
+            np.zeros(shape=(10, 1))
+            ])
+        self.activation_gradient = np.array(
+            [np.zeros(shape=(784, 1)),
+            np.zeros(shape=(70, 1)),
+            np.zeros(shape=(20, 1)),
+            np.zeros(shape=(10, 1))
+            ])
 
 
     def run(self):
+        # assumes that training data has been loaded and inputs normalised
+
         self._feed_forward(0)
         self._reformat_desired_output(self.y_train[0])
         self._mean_sum_squared_errors(self.activation[3], self.y_vector)
@@ -53,8 +75,12 @@ class MLP:
     def _feed_forward(self, index):
         self.activation[0] = self.X_train[index].reshape(784, 1)
 
-        for i in range(0, 2+1):  # loop from the first layer to the one before the last (as I will calc next activations)
+        for i in range(0, self.NUMBER_OF_LAYERS):  # loop from the first layer to the one before the last (as I will calc activation of next layer)
+            # the current weighted sums equal the matrix multiplication of the weights and activations
+            # of the current layer, plus the bias
             self.weighted_sum[i] = np.dot(self.weight[i], self.activation[i]) + self.bias[i]
+
+            # the activation of the next layer equals the sigmoid( weighted sum )
             self.activation[i+1] = self._sigmoid(self.weighted_sum[i])  # changes the activation of the next layer
     
 
@@ -145,18 +171,22 @@ def read_mnist(no_items_each):
 
 
 def main():
+    # read the first 100 items of the mnist dataset, return 2D dict
     mnist = read_mnist(100)
     
     X_train = mnist["training"]["data"]
     y_train = mnist["training"]["labels"]
 
+    # initialise the network
     network = MLP()
+
+    # load up the training data
     network.load_training_data(X_train, y_train)
+
+    # squation inputs in range
     network.normalize_inputs(255)
 
     network.run()
-
-    print(network.weight_gradient)
 
 
 
