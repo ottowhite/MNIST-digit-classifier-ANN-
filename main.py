@@ -6,7 +6,7 @@ np.set_printoptions(linewidth=1000)
 class MLP:
 
     def __init__(self):
-        self.NUMBER_OF_LAYERS = 3
+        self.NUMBER_OF_LAYERS = 3  # excluding input
         
         self.weight = np.array([
             np.random.uniform(low=-1, high=1, size=(70, 784)),  # weights are a random number between -1 and 1
@@ -44,6 +44,7 @@ class MLP:
             np.zeros(shape=(20, 1)),
             np.zeros(shape=(10, 1))
             ])
+        
         self.activation_gradient = np.array(
             [np.zeros(shape=(784, 1)),
             np.zeros(shape=(70, 1)),
@@ -54,12 +55,9 @@ class MLP:
 
     def run(self):
         # assumes that training data has been loaded and inputs normalised
-
         self._feed_forward(0)
-        self._reformat_desired_output(self.y_train[0])
-        self._mean_sum_squared_errors(self.activation[3], self.y_vector)
-
-        self._calculate_gradients()
+        self._mean_sum_squared_errors(self.activation[3], self.y_train[0])
+        self._calculate_gradients(0)
 
 
     def normalize_inputs(self, range):
@@ -73,7 +71,7 @@ class MLP:
 
 
     def _feed_forward(self, index):
-        self.activation[0] = self.X_train[index].reshape(784, 1)
+        self.activation[0] = self.X_train[index]
 
         for i in range(0, self.NUMBER_OF_LAYERS):  # loop from the first layer to the one before the last (as I will calc activation of next layer)
             # the current weighted sums equal the matrix multiplication of the weights and activations
@@ -92,25 +90,17 @@ class MLP:
         return np.exp(-x) / pow((1 + np.exp(-x)), 2)
 
 
-    def _reformat_desired_output(self, x):  # ex: re-formats a desired output from 3 to [0, 0, 0, 1, 0, 0, 0, 0, 0, 0] for MSSE
-        y = np.zeros(shape=10)
-        y[x] = 1
-        self.y_vector = y.reshape(10, 1)
+    def _mean_sum_squared_errors(self, output, desired):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
+        self.error = (np.sum(a=pow((output-desired), 2), axis=0) / 10)[0]
 
 
-    def _mean_sum_squared_errors(self, X, y):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
-        self.error = (np.sum(a=pow((X-y), 2), axis=0) / 10)[0]
-
-
-    def _calculate_gradients(self):
-
+    def _calculate_gradients(self, current_training_example):
         # weights
         for k in range(0, 20):
             for j in range(0, 10):
                 self.weight_gradient[2][j] = np.sum(self.activation[2], axis=0)[0] * self._sigmoid_derivative(self.weighted_sum[2][j]) \
-                                        * 2 * (self.activation[3][j] - self.y_vector[j])
-                self.bias_gradient[2][j] = self._sigmoid_derivative(self.weighted_sum[2][j]) * 2 * (self.activation[3][j] - self.y_vector[j])
-
+                                        * 2 * (self.activation[3][j] - self.y_train[current_training_example][j])
+                self.bias_gradient[2][j] = self._sigmoid_derivative(self.weighted_sum[2][j]) * 2 * (self.activation[3][j] - self.y_train[current_training_example][j])
 
 
 def read_mnist(no_items_each):
@@ -172,23 +162,30 @@ def read_mnist(no_items_each):
 
 def main():
     # read the first 100 items of the mnist dataset, return 2D dict
-    mnist = read_mnist(100)
+    no_items = 100
+    mnist = read_mnist(no_items)
     
-    X_train = mnist["training"]["data"]
-    y_train = mnist["training"]["labels"]
+    y_train_labels = mnist["training"]["labels"]
 
-    # initialise the network
+    # reshape into an array of column vectors
+    X_train = mnist["training"]["data"].reshape(no_items, -1, 1)
+    y_train = np.full(shape=(100, 10, 1), fill_value=0)
+
+    # reformat y-train to give labels in the same format as the network (column vectors)
+    for label, output in zip(y_train_labels, y_train):
+        output[label, 0] = 1
+
+    # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP()
-
-    # load up the training data
     network.load_training_data(X_train, y_train)
-
-    # squation inputs in range
     network.normalize_inputs(255)
 
     network.run()
 
-
+    # gets the highest index in the column vector, which is also equal to digit value
+    print(f"Class:\t\t{np.argmax(network.y_train[0])}")
+    print(f"Prediction:\t{np.argmax(network.activation[3])}")
+    print(f"Error:\t\t{network.error}")
 
 
 if __name__ == "__main__":
