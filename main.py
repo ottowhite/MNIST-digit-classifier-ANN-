@@ -95,13 +95,40 @@ class MLP:
 
 
     def _calculate_gradients(self, current_training_example):
-        # weights
-        for k in range(0, 20):
-            for j in range(0, 10):
-                self.weight_gradient[2][j] = np.sum(self.activation[2], axis=0)[0] * self._sigmoid_derivative(self.weighted_sum[2][j]) \
-                                        * 2 * (self.activation[3][j] - self.y_train[current_training_example][j])
-                self.bias_gradient[2][j] = self._sigmoid_derivative(self.weighted_sum[2][j]) * 2 * (self.activation[3][j] - self.y_train[current_training_example][j])
+        # note that "__" denotes "with respect to"
 
+        # partial derivatives (column vector) of the cost with respect to the outputs
+        c__o = 2 * (self.activation[3] - self.y_train[current_training_example])
+
+        # partial derivatives of the output with respect to the weighted sums
+        o__z = self._sigmoid_derivative(self.weighted_sum[2])
+
+        # calculates the first set of weights and biases
+
+        for j in range(len(self.activation[3])):
+            for k in range(len(self.activation[2])):
+                self.weight_gradient[2][j][k] = self.activation[2][k] * o__z[j] * c__o[j]
+                self.bias_gradient[2][j] = o__z[j] * c__o[j]
+                self.activation_gradient[2][k] += self.weight[2][j][k] * o__z[j] * c__o[j]
+        
+
+        '''
+
+        # calculate the rest of the weights and biases
+
+        for layer in reversed(range(len(self.activation)-2)):
+            a__z = self._sigmoid_derivative(self.weighted_sum[layer])
+
+            for j in range(len(self.activation[layer + 1])):
+                for k in range(len(self.activation[layer])):
+                    self.weight_gradient[layer][j][k] = self.activation[layer][k]
+        
+        '''
+
+        
+        
+
+        
 
 def read_mnist(no_items_each):
     data_locations = {
