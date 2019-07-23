@@ -62,7 +62,7 @@ class MLP:
 
     def normalize_inputs(self, range):
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
-        self.activation[0] = self.activation[0] / range
+        self.X_train[0] = self.X_train[0] / range
 
 
     def load_training_data(self, X_train, y_train):
@@ -112,7 +112,7 @@ class MLP:
                 self.activation_gradient[2][k] += self.weight[2][j][k] * o__z[j] * c__o[j]
         
 
-        '''
+        
 
         # calculate the rest of the weights and biases
 
@@ -121,9 +121,9 @@ class MLP:
 
             for j in range(len(self.activation[layer + 1])):
                 for k in range(len(self.activation[layer])):
-                    self.weight_gradient[layer][j][k] = self.activation[layer][k]
-        
-        '''
+                    self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                    self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
+                    self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
 
         
         
@@ -150,7 +150,7 @@ def read_mnist(no_items_each):
             no_bytes = no_images * no_rows * no_columns
 
             X_train = np.asarray(
-                st.unpack(">" + "B" * 784 * no_items_each, all_data[x].read(784 * no_items_each))).reshape(
+                st.unpack(">" + "B" * 784 * no_items_each, all_data[x].read(784 * no_items_each)), dtype=np.float).reshape(
                 no_items_each, 784)
         elif x == 1:
             no_labels = st.unpack(">I", all_data[x].read(4))[0]
@@ -163,7 +163,7 @@ def read_mnist(no_items_each):
             no_bytes = no_images * no_rows * no_columns
 
             X_test = np.asarray(
-                st.unpack(">" + "B" * 784 * no_items_each, all_data[x].read(784 * no_items_each))).reshape(
+                st.unpack(">" + "B" * 784 * no_items_each, all_data[x].read(784 * no_items_each)), dtype=np.float).reshape(
                 no_items_each, 784)
         elif x == 3:
             no_labels = st.unpack(">I", all_data[x].read(4))[0]
@@ -175,16 +175,6 @@ def read_mnist(no_items_each):
     }
 
     return formatted_data
-
-
-
-
-    # weights
-    for k in range(0, 20):
-        for j in range(0, 10):
-            weight_gradient[2][j] = np.sum(activation[2], axis=0)[0] * sigmoid_derivative(weighted_sum[2][j]) \
-                                    * 2 * (output[j] - y[j])
-            bias_gradient[2][j] = sigmoid_derivative(weighted_sum[2][j]) * 2 * (activation[3][j] - y[j])
 
 
 def main():
