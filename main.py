@@ -10,20 +10,26 @@ warnings.filterwarnings("error")
 
 class MLP:
 
-    def __init__(self):
+    def __init__(self, weight_path=None, bias_path=None):
         self.NUMBER_OF_LAYERS = 3  # excluding input
         
-        self.weight = np.array([
-            np.random.uniform(low=-1, high=1, size=(70, 784)),  # weights are a random number between -1 and 1
-            np.random.uniform(low=-1, high=1, size=(20, 70)), 
-            np.random.uniform(low=-1, high=1, size=(10, 20))
-            ])
+        if weight_path == None:
+            self.weight = np.array([
+                np.random.uniform(low=-1, high=1, size=(70, 784)),  # weights are a random number between -1 and 1
+                np.random.uniform(low=-1, high=1, size=(20, 70)), 
+                np.random.uniform(low=-1, high=1, size=(10, 20))
+                ])
+        else:
+            self.weight = np.load(weight_path)
 
-        self.bias = np.array([
-            np.random.uniform(low=-1, high=1, size=(70, 1)),   # biases are a random number between -1 and 1
-            np.random.uniform(low=-1, high=1, size=(20, 1)),   # implementing all column vectors as
-            np.random.uniform(low=-1, high=1, size=(10, 1))    # number x 1 matrices   
-            ])  
+        if bias_path == None:
+            self.bias = np.array([
+                np.random.uniform(low=-1, high=1, size=(70, 1)),   # biases are a random number between -1 and 1
+                np.random.uniform(low=-1, high=1, size=(20, 1)),   # implementing all column vectors as
+                np.random.uniform(low=-1, high=1, size=(10, 1))    # number x 1 matrices   
+                ])
+        else:
+            self.bias = np.load(bias_path)
         
         self.weighted_sum = np.array([
             np.zeros(shape=(70, 1)),
@@ -58,31 +64,21 @@ class MLP:
             ])
 
 
-    def run(self):
-        error = []
-        iteration = []
-
+    def train(self, learning_rate, verbose=True):
         # assumes that training data has been loaded and inputs normalised
         for x in range(len(self.X_train)):
             self._feed_forward(x)
             self._mean_sum_squared_errors(self.activation[3], self.y_train[x])
             self._calculate_gradients(x)
-            self._adjust_network(0.001)
+            self._adjust_network(learning_rate)
 
-            # gets the highest index in the column vector, which is also equal to digit value
-            print(f"\nIteration:\t{x}")
-            print(f"Class:\t\t{np.argmax(self.y_train[x])}")
-            print(f"Prediction:\t{np.argmax(self.activation[3])}")
-            print(f"Error:\t\t{self.error}")
-            iteration.append(x)
-            error.append(self.error)
 
-        plt.xlabel("Iteration")
-        plt.ylabel("Error")
-        plt.plot(iteration, error)
-        plt.show()
-
-        ipdb.set_trace()
+            if verbose == True:
+                # gets the highest index in the column vector, which is also equal to digit value
+                print(f"\nIteration:\t{x} / {len(self.X_train) - 1}")
+                print(f"Class:\t\t{np.argmax(self.y_train[x])}")
+                print(f"Prediction:\t{np.argmax(self.activation[3])}")
+                print(f"Error:\t\t{self.error}")
 
 
     def normalize_inputs(self, range):
@@ -95,6 +91,11 @@ class MLP:
         self.X_train, self.y_train = (X_train, y_train)
 
 
+    def save_parameters(self, weight_path, bias_path):
+        np.save(weight_path, self.weight)
+        np.save(bias_path, self.bias)
+
+
     def _feed_forward(self, index):
         self.activation[0] = self.X_train[index]
 
@@ -103,14 +104,17 @@ class MLP:
             # of the current layer, plus the bias
             self.weighted_sum[i] = np.dot(self.weight[i], self.activation[i]) + self.bias[i]
 
-            # the activation of the next layer equals the sigmoid( weighted sum )
-
-            vsig = np.vectorize(self._sigmoid)
+            # the activation of the next layer equals the sigmoid(weighted sum)
+            vsig = np.vectorize(self._sigmoid) # allows me to use the approximated sigmoid function
 
             self.activation[i+1] = vsig(self.weighted_sum[i])  # changes the activation of the next layer
     
 
     def _sigmoid(self, x):
+        # approximating the function because when x > 36, _sigmoid(x) rounds to 1,
+        # mirrored the effect on the other side for evenness
+        # performing logic in this function requires me to use vectorised version
+        
         if x > 36:
             result = 1
         elif x < -36:
@@ -119,6 +123,7 @@ class MLP:
             result = 1 / (1 + np.exp(-x))
 
         return result
+
 
     def _sigmoid_derivative(self, x):
         return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
@@ -223,7 +228,7 @@ def read_mnist(no_items_each):
 
 def main():
     # read the first 100 items of the mnist dataset, return 2D dict
-    no_items = 350
+    no_items = 500
     mnist = read_mnist(no_items)
     
     y_train_labels = mnist["training"]["labels"]
@@ -241,7 +246,9 @@ def main():
     network.load_training_data(X_train, y_train)
     network.normalize_inputs(255)
 
-    network.run()
+    network.train(learning_rate=0.001, verbose=True)
+
+    network.save_parameters("weights", "biases")
 
 
 if __name__ == "__main__":
