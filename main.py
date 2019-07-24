@@ -1,7 +1,12 @@
 import struct as st
 import numpy as np
-import pdb
+import ipdb
+import matplotlib.pyplot as plt
+import pandas as pd
 np.set_printoptions(linewidth=1000)
+
+import warnings
+warnings.filterwarnings("error")
 
 class MLP:
 
@@ -54,15 +59,35 @@ class MLP:
 
 
     def run(self):
+        error = []
+        iteration = []
+
         # assumes that training data has been loaded and inputs normalised
-        self._feed_forward(0)
-        self._mean_sum_squared_errors(self.activation[3], self.y_train[0])
-        self._calculate_gradients(0)
+        for x in range(len(self.X_train)):
+            self._feed_forward(x)
+            self._mean_sum_squared_errors(self.activation[3], self.y_train[x])
+            self._calculate_gradients(x)
+            self._adjust_network(0.001)
+
+            # gets the highest index in the column vector, which is also equal to digit value
+            print(f"\nIteration:\t{x}")
+            print(f"Class:\t\t{np.argmax(self.y_train[x])}")
+            print(f"Prediction:\t{np.argmax(self.activation[3])}")
+            print(f"Error:\t\t{self.error}")
+            iteration.append(x)
+            error.append(self.error)
+
+        plt.xlabel("Iteration")
+        plt.ylabel("Error")
+        plt.plot(iteration, error)
+        plt.show()
+
+        ipdb.set_trace()
 
 
     def normalize_inputs(self, range):
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
-        self.X_train[0] = self.X_train[0] / range
+        self.X_train = self.X_train / range
 
 
     def load_training_data(self, X_train, y_train):
@@ -79,15 +104,24 @@ class MLP:
             self.weighted_sum[i] = np.dot(self.weight[i], self.activation[i]) + self.bias[i]
 
             # the activation of the next layer equals the sigmoid( weighted sum )
-            self.activation[i+1] = self._sigmoid(self.weighted_sum[i])  # changes the activation of the next layer
+
+            vsig = np.vectorize(self._sigmoid)
+
+            self.activation[i+1] = vsig(self.weighted_sum[i])  # changes the activation of the next layer
     
 
     def _sigmoid(self, x):
-        return 1 / (1 + np.exp(-x))
+        if x > 36:
+            result = 1
+        elif x < -36:
+            result = 0
+        else:
+            result = 1 / (1 + np.exp(-x))
 
+        return result
 
     def _sigmoid_derivative(self, x):
-        return np.exp(-x) / pow((1 + np.exp(-x)), 2)
+        return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
 
 
     def _mean_sum_squared_errors(self, output, desired):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
@@ -97,6 +131,14 @@ class MLP:
     def _calculate_gradients(self, current_training_example):
         # note that "__" denotes "with respect to"
 
+        # reset activation gradients before each calculation because they are cumulative
+        self.activation_gradient = np.array(
+            [np.zeros(shape=(784, 1)),
+            np.zeros(shape=(70, 1)),
+            np.zeros(shape=(20, 1)),
+            np.zeros(shape=(10, 1))
+            ])
+        
         # partial derivatives (column vector) of the cost with respect to the outputs
         c__o = 2 * (self.activation[3] - self.y_train[current_training_example])
 
@@ -110,13 +152,11 @@ class MLP:
                 self.weight_gradient[2][j][k] = self.activation[2][k] * o__z[j] * c__o[j]
                 self.bias_gradient[2][j] = o__z[j] * c__o[j]
                 self.activation_gradient[2][k] += self.weight[2][j][k] * o__z[j] * c__o[j]
-        
-
-        
 
         # calculate the rest of the weights and biases
 
         for layer in reversed(range(len(self.activation)-2)):
+
             a__z = self._sigmoid_derivative(self.weighted_sum[layer])
 
             for j in range(len(self.activation[layer + 1])):
@@ -124,12 +164,13 @@ class MLP:
                     self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
                     self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
                     self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+    
+
+    def _adjust_network(self, learning_rate):
+        self.weight -= learning_rate * self.weight_gradient
+        self.bias -= learning_rate * self.bias_gradient
 
         
-        
-
-        
-
 def read_mnist(no_items_each):
     data_locations = {
         "testing": {"data": "data/t10k-images-idx3-ubyte", "labels": "data/t10k-labels-idx1-ubyte"},
@@ -174,19 +215,22 @@ def read_mnist(no_items_each):
         "training": {"data": X_train, "labels": y_train}
     }
 
+    for reader in all_data:
+        reader.close()
+
     return formatted_data
 
 
 def main():
     # read the first 100 items of the mnist dataset, return 2D dict
-    no_items = 100
+    no_items = 350
     mnist = read_mnist(no_items)
     
     y_train_labels = mnist["training"]["labels"]
 
     # reshape into an array of column vectors
     X_train = mnist["training"]["data"].reshape(no_items, -1, 1)
-    y_train = np.full(shape=(100, 10, 1), fill_value=0)
+    y_train = np.full(shape=(no_items, 10, 1), fill_value=0)
 
     # reformat y-train to give labels in the same format as the network (column vectors)
     for label, output in zip(y_train_labels, y_train):
@@ -198,11 +242,6 @@ def main():
     network.normalize_inputs(255)
 
     network.run()
-
-    # gets the highest index in the column vector, which is also equal to digit value
-    print(f"Class:\t\t{np.argmax(network.y_train[0])}")
-    print(f"Prediction:\t{np.argmax(network.activation[3])}")
-    print(f"Error:\t\t{network.error}")
 
 
 if __name__ == "__main__":
