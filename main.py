@@ -99,8 +99,6 @@ class MLP:
 
         plt.plot(data.iteration, data.error)
         plt.show()
-
-        ipdb.set_trace()
             
 
     def normalize_inputs(self, range):
@@ -170,11 +168,13 @@ class MLP:
         # reset activation gradients before each calculation because they are cumulative
         self._reset_activation_gradients()
 
+        # for calculating gradients of the first set of weights and biases
+        # partial derivatives (column vector) of the cost with respect to the outputs
+        c__o = 2 * (self.activation[-1] - self.y_train[current_training_example])
+
+
         # calculate the rest of the weights and biases starting at the layer preceding the last layer
         for layer in reversed(range(len(self.activation)-1)):
-            # for calculating gradients of the first set of weights and biases
-            # partial derivatives (column vector) of the cost with respect to the outputs
-            c__o = 2 * (self.activation[-1] - self.y_train[current_training_example])
 
             # partial derivatives of the output with respect to the weighted sums
             o__z = self._sigmoid_derivative(self.weighted_sum[layer])
@@ -189,10 +189,13 @@ class MLP:
                         self.weight_gradient[layer][j][k] = self.activation[layer][k] * o__z[j] * c__o[j]
                         self.bias_gradient[layer][j] = o__z[j] * c__o[j]
                         self.activation_gradient[layer][k] += self.weight[layer][j][k] * o__z[j] * c__o[j]
-                    else:
+                    elif layer != (len(self.activation) - 2) and layer > 0:
                         self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
                         self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
                         self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                    else:
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
 
                     # FIXME - don't calculate the last activation gradients
     
