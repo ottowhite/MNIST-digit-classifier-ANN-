@@ -10,59 +10,43 @@ warnings.filterwarnings("error")
 
 class MLP:
 
-    def __init__(self, weight_path=None, bias_path=None):
-        self.NUMBER_OF_LAYERS = 3  # excluding input
-        
-        if weight_path == None:
-            self.weight = np.array([
-                np.random.uniform(low=-1, high=1, size=(70, 784)),  # weights are a random number between -1 and 1
-                np.random.uniform(low=-1, high=1, size=(20, 70)), 
-                np.random.uniform(low=-1, high=1, size=(10, 20))
-                ])
-        else:
-            self.weight = np.load(weight_path)
+    def __init__(self, structure=(784, 70, 20, 10), weight_path=None, bias_path=None):
+        self.structure = structure
+        self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
 
-        if bias_path == None:
-            self.bias = np.array([
-                np.random.uniform(low=-1, high=1, size=(70, 1)),   # biases are a random number between -1 and 1
-                np.random.uniform(low=-1, high=1, size=(20, 1)),   # implementing all column vectors as
-                np.random.uniform(low=-1, high=1, size=(10, 1))    # number x 1 matrices   
-                ])
-        else:
-            self.bias = np.load(bias_path)
-        
-        self.weighted_sum = np.array([
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
+        activation = []
+        weight = []
+        bias = []
+        weighted_sum = []
+        weight_gradient = []
+        bias_gradient = []
+        activation_gradient = []
 
-        self.activation = np.array([
-            np.zeros(shape=(784, 1)),
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
+        for i in range(len(structure)):
+            activation.append(np.zeros(shape=(structure[i], 1)))
 
-        self.weight_gradient = np.array([
-            np.zeros(shape=(70, 784)),
-            np.zeros(shape=(20, 70)),
-            np.zeros(shape=(10, 20))
-            ])
-        
-        self.bias_gradient = np.array([
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
-        
-        self.activation_gradient = np.array(
-            [np.zeros(shape=(784, 1)),
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
+            activation_gradient.append(np.zeros(shape=(structure[i], 1)))
 
+            if i != 0:
+                if weight_path == None:
+                    weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])))
+                
+                if bias_path == None:
+                    bias.append(np.random.uniform(low=-1, high=1, size=(structure[i], 1)))
+
+                weighted_sum.append(np.zeros(shape=(structure[i], 1)))
+
+                weight_gradient.append(np.zeros(shape=(structure[i], structure[i-1])))
+                bias_gradient.append(np.zeros(shape=(structure[i], 1)))
+
+
+        self.activation = np.array(activation)
+        self.weight = np.array(weight) if weight_path == None else np.load(weight_path)
+        self.bias = np.array(bias)  if bias_path == None else np.load(bias_path)
+        self.weighted_sum = np.array(weighted_sum)
+        self.weight_gradient = np.array(weight_gradient)
+        self.bias_gradient = np.array(bias_gradient)
+        self.activation_gradient = np.array(activation_gradient)
 
     def train(self, learning_rate, verbose=True):
         data = {
@@ -76,7 +60,7 @@ class MLP:
         # assumes that training data has been loaded and inputs normalised
         for x in range(len(self.X_train)):
             self._feed_forward(x)
-            self._mean_sum_squared_errors(self.activation[3], self.y_train[x])
+            self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_train[x])
             self._calculate_gradients(x)
             self._adjust_network(learning_rate)
 
@@ -84,15 +68,14 @@ class MLP:
             if verbose == True:
                 # gets the highest index in the column vector, which is also equal to digit value
 
-
                 print(f"\nIteration:\t{x} / {(len(self.X_train) - 1)}")
                 print(f"Class:\t\t{np.argmax(self.y_train[x])}")
-                print(f"Prediction:\t{np.argmax(self.activation[3])}")
+                print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
                 print(f"Error:\t\t{self.error}")
                 
                 data["iteration"].append(x)
                 data["class"].append(np.argmax(self.y_train[x]))
-                data["prediction"].append(np.argmax(self.activation[3]))
+                data["prediction"].append(np.argmax(self.activation[self.NUMBER_OF_LAYERS]))
                 data["error"].append(self.error)
 
         data = pd.DataFrame(data)
@@ -154,12 +137,13 @@ class MLP:
 
 
     def _reset_activation_gradients(self):
-        self.activation_gradient = np.array(
-            [np.zeros(shape=(784, 1)),
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-        ])
+        # as the activation gradients are calculated as a sum, they need to be set back to 0
+        
+        activation_gradient = []
+        for i in range(len(self.structure)):
+            activation_gradient.append(np.zeros(shape=(self.structure[i], 1)))
+        
+        self.activation_gradient = np.array(activation_gradient)
 
 
     def _calculate_gradients(self, current_training_example):
@@ -196,8 +180,6 @@ class MLP:
                     else:
                         self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
                         self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
-
-                    # FIXME - don't calculate the last activation gradients
     
 
     def _adjust_network(self, learning_rate):
@@ -257,7 +239,7 @@ def read_mnist(no_items_each):
 
 def main():
     # read the first 100 items of the mnist dataset, return 2D dict
-    no_items = 10
+    no_items = 100
     mnist = read_mnist(no_items)
     
     y_train_labels = mnist["training"]["labels"]
@@ -271,13 +253,65 @@ def main():
         output[label, 0] = 1
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
-    network = MLP()
+    network = MLP(structure=(784, 70, 20, 10), weight_path="weights.npy", bias_path="biases.npy")
+
     network.load_training_data(X_train, y_train)
     network.normalize_inputs(255)
 
-    network.train(learning_rate=0.5, verbose=True)
+    network.train(learning_rate=0.1, verbose=True)
+
+
+def test():
+    # turn (784, 70, 20, 10) into:
+    
+    structure = (784, 70, 20, 10)
+
+    activation = []
+    weight = []
+    bias = []
+    weighted_sum = []
+    weight_gradient = []
+    bias_gradient = []
+    activation_gradient = []
+
+    weight_path = None
+    bias_path = None
+
+    for i in range(len(structure)):
+        activation.append(np.zeros(shape=(structure[i], 1)))
+
+        activation_gradient.append(np.zeros(shape=(structure[i], 1)))
+
+        if i != 0:
+            if weight_path == None:
+                weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])))
+            else:
+                weight = np.load(weight_path)
+            
+            if bias_path == None:
+                bias.append(np.random.uniform(low=-1, high=1, size=(structure[i], 1)))
+            else:
+                bias = np.load(bias_path)
+
+            weighted_sum.append(np.zeros(shape=(structure[i], 1)))
+
+            weight_gradient.append(np.zeros(shape=(structure[i], structure[i-1])))
+            bias_gradient.append(np.zeros(shape=(structure[i], 1)))
+
+
+    activation = np.array(activation)
+    weight = np.array(weight) if weight_path == None else False
+    bias = np.array(bias)  if bias_path == None else False
+    weighted_sum = np.array(weighted_sum)
+    weight_gradient = np.array(weight_gradient)
+    bias_gradient = np.array(bias_gradient)
+    activation_gradient = np.array(activation_gradient)
+
+    ipdb.set_trace()
+
 
 
 
 if __name__ == "__main__":
     main()
+    #test()
