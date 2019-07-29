@@ -10,61 +10,47 @@ warnings.filterwarnings("error")
 
 class MLP:
 
-    def __init__(self, weight_path=None, bias_path=None):
-        self.NUMBER_OF_LAYERS = 3  # excluding input
-        
-        if weight_path == None:
-            self.weight = np.array([
-                np.random.uniform(low=-1, high=1, size=(70, 784)),  # weights are a random number between -1 and 1
-                np.random.uniform(low=-1, high=1, size=(20, 70)), 
-                np.random.uniform(low=-1, high=1, size=(10, 20))
-                ])
-        else:
-            self.weight = np.load(weight_path)
+    def __init__(self, structure=(784, 70, 20, 10), weight_path=None, bias_path=None):
+        self.structure = structure
+        self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
 
-        if bias_path == None:
-            self.bias = np.array([
-                np.random.uniform(low=-1, high=1, size=(70, 1)),   # biases are a random number between -1 and 1
-                np.random.uniform(low=-1, high=1, size=(20, 1)),   # implementing all column vectors as
-                np.random.uniform(low=-1, high=1, size=(10, 1))    # number x 1 matrices   
-                ])
-        else:
-            self.bias = np.load(bias_path)
-        
-        self.weighted_sum = np.array([
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
+        activation = []
+        weight = []
+        bias = []
+        weighted_sum = []
+        weight_gradient = []
+        bias_gradient = []
+        activation_gradient = []
 
-        self.activation = np.array([
-            np.zeros(shape=(784, 1)),
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
+        for i in range(len(structure)):
+            activation.append(np.zeros(shape=(structure[i], 1)))
 
-        self.weight_gradient = np.array([
-            np.zeros(shape=(70, 784)),
-            np.zeros(shape=(20, 70)),
-            np.zeros(shape=(10, 20))
-            ])
-        
-        self.bias_gradient = np.array([
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
-        
-        self.activation_gradient = np.array(
-            [np.zeros(shape=(784, 1)),
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-            ])
+            activation_gradient.append(np.zeros(shape=(structure[i], 1)))
+
+            if i != 0:
+                if weight_path == None:
+                    weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])))
+                
+                if bias_path == None:
+                    bias.append(np.random.uniform(low=-1, high=1, size=(structure[i], 1)))
+
+                weighted_sum.append(np.zeros(shape=(structure[i], 1)))
+
+                weight_gradient.append(np.zeros(shape=(structure[i], structure[i-1])))
+                bias_gradient.append(np.zeros(shape=(structure[i], 1)))
 
 
-    def train(self, learning_rate, verbose=True):
+        self.activation = np.array(activation)
+        self.weight = np.array(weight) if weight_path == None else np.load(weight_path)
+        self.bias = np.array(bias)  if bias_path == None else np.load(bias_path)
+        self.weighted_sum = np.array(weighted_sum)
+        self.weight_gradient = np.array(weight_gradient)
+        self.bias_gradient = np.array(bias_gradient)
+        self.activation_gradient = np.array(activation_gradient)
+
+
+    def train(self, learning_rate=0.01, verbose=True):
+        self.learning_rate = learning_rate
         data = {
             "iteration": [],
             "class": [],
@@ -75,33 +61,56 @@ class MLP:
 
         # assumes that training data has been loaded and inputs normalised
         for x in range(len(self.X_train)):
+
             self._feed_forward(x)
-            self._mean_sum_squared_errors(self.activation[3], self.y_train[x])
+            self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_train[x])
             self._calculate_gradients(x)
-            self._adjust_network(learning_rate)
+            self._adjust_network(self.learning_rate)
 
 
             if verbose == True:
                 # gets the highest index in the column vector, which is also equal to digit value
 
-
                 print(f"\nIteration:\t{x} / {(len(self.X_train) - 1)}")
                 print(f"Class:\t\t{np.argmax(self.y_train[x])}")
-                print(f"Prediction:\t{np.argmax(self.activation[3])}")
+                print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
                 print(f"Error:\t\t{self.error}")
                 
                 data["iteration"].append(x)
                 data["class"].append(np.argmax(self.y_train[x]))
-                data["prediction"].append(np.argmax(self.activation[3]))
+                data["prediction"].append(np.argmax(self.activation[self.NUMBER_OF_LAYERS]))
                 data["error"].append(self.error)
 
         data = pd.DataFrame(data)
 
         plt.plot(data.iteration, data.error)
+        plt.xlabel("Iteration")
+        plt.ylabel("Error")
+        plt.title(f"Training network with structure {self.structure} with learning rate {learning_rate}")
         plt.show()
 
-        ipdb.set_trace()
-            
+
+    def test(self, X_test, y_test):
+        total_tests = len(X_test)
+        correct_tests = 0
+        total_error = 0
+        
+        for x in range(len(X_test)-1):
+            self._feed_forward(x, test_set=X_test)
+            self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], y_test[x])
+
+            total_error += self.error
+
+            if np.argmax(self.activation[self.NUMBER_OF_LAYERS]) == np.argmax(y_test[x]):
+                correct_tests += 1
+
+        mean_error = total_error / total_tests
+        percent_correct = (correct_tests / total_tests) * 100
+
+        print(f"\nMean error: {mean_error}")
+        print(f"Percent accurate: {percent_correct}")
+
+
 
     def normalize_inputs(self, range):
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
@@ -118,8 +127,8 @@ class MLP:
         np.save(bias_path, self.bias)
 
 
-    def _feed_forward(self, index):
-        self.activation[0] = self.X_train[index]
+    def _feed_forward(self, index, test_set=None):
+        self.activation[0] = self.X_train[index] if test_set is None else test_set[index]
 
         for i in range(0, self.NUMBER_OF_LAYERS):  # loop from the first layer to the one before the last (as I will calc activation of next layer)
             # the current weighted sums equal the matrix multiplication of the weights and activations
@@ -156,12 +165,13 @@ class MLP:
 
 
     def _reset_activation_gradients(self):
-        self.activation_gradient = np.array(
-            [np.zeros(shape=(784, 1)),
-            np.zeros(shape=(70, 1)),
-            np.zeros(shape=(20, 1)),
-            np.zeros(shape=(10, 1))
-        ])
+        # as the activation gradients are calculated as a sum, they need to be set back to 0
+        
+        activation_gradient = []
+        for i in range(len(self.structure)):
+            activation_gradient.append(np.zeros(shape=(self.structure[i], 1)))
+        
+        self.activation_gradient = np.array(activation_gradient)
 
 
     def _calculate_gradients(self, current_training_example):
@@ -169,34 +179,35 @@ class MLP:
 
         # reset activation gradients before each calculation because they are cumulative
         self._reset_activation_gradients()
-        
+
+        # for calculating gradients of the first set of weights and biases
         # partial derivatives (column vector) of the cost with respect to the outputs
-        c__o = 2 * (self.activation[3] - self.y_train[current_training_example])
+        c__o = 2 * (self.activation[-1] - self.y_train[current_training_example])
 
-        # partial derivatives of the output with respect to the weighted sums
-        o__z = self._sigmoid_derivative(self.weighted_sum[2])
-
-        # calculates the first set of weights and biases
-
-        for j in range(len(self.activation[3])):
-            for k in range(len(self.activation[2])):
-                self.weight_gradient[2][j][k] = self.activation[2][k] * o__z[j] * c__o[j]
-                self.bias_gradient[2][j] = o__z[j] * c__o[j]
-                self.activation_gradient[2][k] += self.weight[2][j][k] * o__z[j] * c__o[j]
 
         # calculate the rest of the weights and biases starting at the layer preceding the last layer
+        for layer in reversed(range(len(self.activation)-1)):
 
-        for layer in reversed(range(len(self.activation)-2)):
+            # partial derivatives of the output with respect to the weighted sums
+            o__z = self._sigmoid_derivative(self.weighted_sum[layer])
 
+            # for calculations for the rest of the derivatives
             a__z = self._sigmoid_derivative(self.weighted_sum[layer])
 
             for j in range(len(self.activation[layer + 1])):
                 for k in range(len(self.activation[layer])):
-                    self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
-                    self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
-                    self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
-
-                    # FIXME - don't calculate the last activation gradients
+                    
+                    if layer == (len(self.activation) - 2):
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * o__z[j] * c__o[j]
+                        self.bias_gradient[layer][j] = o__z[j] * c__o[j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * o__z[j] * c__o[j]
+                    elif layer != (len(self.activation) - 2) and layer > 0:
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                    else:
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
     
 
     def _adjust_network(self, learning_rate):
@@ -256,25 +267,51 @@ def read_mnist(no_items_each):
 
 def main():
     # read the first 100 items of the mnist dataset, return 2D dict
-    no_items = 10
-    mnist = read_mnist(no_items)
+    def format_mnist_training(no_items):
+        global X_train
+        global y_train
+        
+        mnist = read_mnist(no_items)
+        
+        y_train_labels = mnist["training"]["labels"]
+
+        # reshape into an array of column vectors
+        X_train = mnist["training"]["data"].reshape(no_items, -1, 1)
+        y_train = np.full(shape=(no_items, 10, 1), fill_value=0)
+
+        # reformat y-train to give labels in the same format as the network (column vectors)
+        for label, output in zip(y_train_labels, y_train):
+            output[label, 0] = 1
+
+
+    def format_mnist_testing(no_items):
+        global X_test
+        global y_test
+
+        mnist = read_mnist(no_items)
+        
+        y_test_labels = mnist["testing"]["labels"]
+
+        # reshape into an array of column vectors
+        X_test = mnist["testing"]["data"].reshape(no_items, -1, 1)
+        y_test = np.full(shape=(no_items, 10, 1), fill_value=0)
+        
+        for label, output in zip(y_test_labels, y_test):
+            output[label, 0] = 1
     
-    y_train_labels = mnist["training"]["labels"]
-
-    # reshape into an array of column vectors
-    X_train = mnist["training"]["data"].reshape(no_items, -1, 1)
-    y_train = np.full(shape=(no_items, 10, 1), fill_value=0)
-
-    # reformat y-train to give labels in the same format as the network (column vectors)
-    for label, output in zip(y_train_labels, y_train):
-        output[label, 0] = 1
+    format_mnist_training(750)
+    format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
-    network = MLP()
+    network = MLP(structure=(784, 200, 80, 10))
+
     network.load_training_data(X_train, y_train)
     network.normalize_inputs(255)
+    network.train(learning_rate=0.05, verbose=True)
+    network.test(X_test, y_test)
 
-    network.train(learning_rate=0.5, verbose=True)
+    if input("\nSave weights and biases? (y/n) ") == "y":
+        network.save_parameters("weights", "biases")
 
 
 
