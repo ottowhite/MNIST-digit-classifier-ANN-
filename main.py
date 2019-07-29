@@ -10,9 +10,17 @@ warnings.filterwarnings("error")
 
 class MLP:
 
-    def __init__(self, structure=(784, 70, 20, 10), weight_path=None, bias_path=None):
+    def __init__(self, structure, weight_path=None, bias_path=None):
         self.structure = structure
         self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
+
+        # for when progress should be graphed and recorded
+        self.record = {
+            "iteration": [],
+            "class": [],
+            "prediction": [],
+            "error": []
+        }
 
         activation = []
         weight = []
@@ -51,12 +59,6 @@ class MLP:
 
     def train(self, learning_rate=0.01, verbose=True):
         self.learning_rate = learning_rate
-        data = {
-            "iteration": [],
-            "class": [],
-            "prediction": [],
-            "error": []
-        }
 
 
         # assumes that training data has been loaded and inputs normalised
@@ -67,27 +69,21 @@ class MLP:
             self._calculate_gradients(x)
             self._adjust_network(self.learning_rate)
 
+            self._record(x)
+            
 
             if verbose == True:
                 # gets the highest index in the column vector, which is also equal to digit value
-
                 print(f"\nIteration:\t{x} / {(len(self.X_train) - 1)}")
                 print(f"Class:\t\t{np.argmax(self.y_train[x])}")
                 print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
                 print(f"Error:\t\t{self.error}")
                 
-                data["iteration"].append(x)
-                data["class"].append(np.argmax(self.y_train[x]))
-                data["prediction"].append(np.argmax(self.activation[self.NUMBER_OF_LAYERS]))
-                data["error"].append(self.error)
+        
+        self._visualise_records()
+            
 
-        data = pd.DataFrame(data)
-
-        plt.plot(data.iteration, data.error)
-        plt.xlabel("Iteration")
-        plt.ylabel("Error")
-        plt.title(f"Training network with structure {self.structure} with learning rate {learning_rate}")
-        plt.show()
+        
 
 
     def test(self, X_test, y_test):
@@ -109,7 +105,6 @@ class MLP:
 
         print(f"\nMean error: {mean_error}")
         print(f"Percent accurate: {percent_correct}")
-
 
 
     def normalize_inputs(self, range):
@@ -214,7 +209,24 @@ class MLP:
         self.weight -= learning_rate * self.weight_gradient
         self.bias -= learning_rate * self.bias_gradient
 
+
+    def _record(self, iteration):
+        self.record["iteration"].append(iteration)
+        self.record["class"].append(np.argmax(self.y_train[iteration]))
+        self.record["prediction"].append(np.argmax(self.activation[self.NUMBER_OF_LAYERS]))
+        self.record["error"].append(self.error)
+    
+
+    def _visualise_records(self):
+        self.record = pd.DataFrame(self.record)
+
+        plt.plot(self.record.iteration, self.record.error)
+        plt.xlabel("Iteration")
+        plt.ylabel("Error")
+        plt.title(f"Training network with structure {self.structure} with learning rate {self.learning_rate}")
+        plt.show()
         
+
 def read_mnist(no_items_each):
     data_locations = {
         "testing": {"data": "data/t10k-images-idx3-ubyte", "labels": "data/t10k-labels-idx1-ubyte"},
@@ -299,7 +311,7 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(750)
+    format_mnist_training(5)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
@@ -307,6 +319,8 @@ def main():
 
     network.load_training_data(X_train, y_train)
     network.normalize_inputs(255)
+
+
     network.train(learning_rate=0.05, verbose=True)
     network.test(X_test, y_test)
 
