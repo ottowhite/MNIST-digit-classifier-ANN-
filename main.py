@@ -65,6 +65,14 @@ class MLP:
 
 
     def train(self, learning_rate, verbose=True):
+        data = {
+            "iteration": [],
+            "class": [],
+            "prediction": [],
+            "error": []
+        }
+
+
         # assumes that training data has been loaded and inputs normalised
         for x in range(len(self.X_train)):
             self._feed_forward(x)
@@ -75,11 +83,25 @@ class MLP:
 
             if verbose == True:
                 # gets the highest index in the column vector, which is also equal to digit value
-                print(f"\nIteration:\t{x} / {len(self.X_train) - 1}")
+
+
+                print(f"\nIteration:\t{x} / {(len(self.X_train) - 1)}")
                 print(f"Class:\t\t{np.argmax(self.y_train[x])}")
                 print(f"Prediction:\t{np.argmax(self.activation[3])}")
                 print(f"Error:\t\t{self.error}")
+                
+                data["iteration"].append(x)
+                data["class"].append(np.argmax(self.y_train[x]))
+                data["prediction"].append(np.argmax(self.activation[3]))
+                data["error"].append(self.error)
 
+        data = pd.DataFrame(data)
+
+        plt.plot(data.iteration, data.error)
+        plt.show()
+
+        ipdb.set_trace()
+            
 
     def normalize_inputs(self, range):
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
@@ -133,16 +155,20 @@ class MLP:
         self.error = (np.sum(a=pow((output-desired), 2), axis=0) / 10)[0]
 
 
-    def _calculate_gradients(self, current_training_example):
-        # note that "__" denotes "with respect to"
-
-        # reset activation gradients before each calculation because they are cumulative
+    def _reset_activation_gradients(self):
         self.activation_gradient = np.array(
             [np.zeros(shape=(784, 1)),
             np.zeros(shape=(70, 1)),
             np.zeros(shape=(20, 1)),
             np.zeros(shape=(10, 1))
-            ])
+        ])
+
+
+    def _calculate_gradients(self, current_training_example):
+        # note that "__" denotes "with respect to"
+
+        # reset activation gradients before each calculation because they are cumulative
+        self._reset_activation_gradients()
         
         # partial derivatives (column vector) of the cost with respect to the outputs
         c__o = 2 * (self.activation[3] - self.y_train[current_training_example])
@@ -158,7 +184,7 @@ class MLP:
                 self.bias_gradient[2][j] = o__z[j] * c__o[j]
                 self.activation_gradient[2][k] += self.weight[2][j][k] * o__z[j] * c__o[j]
 
-        # calculate the rest of the weights and biases
+        # calculate the rest of the weights and biases starting at the layer preceding the last layer
 
         for layer in reversed(range(len(self.activation)-2)):
 
@@ -169,6 +195,8 @@ class MLP:
                     self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
                     self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
                     self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+
+                    # FIXME - don't calculate the last activation gradients
     
 
     def _adjust_network(self, learning_rate):
@@ -228,7 +256,7 @@ def read_mnist(no_items_each):
 
 def main():
     # read the first 100 items of the mnist dataset, return 2D dict
-    no_items = 500
+    no_items = 10
     mnist = read_mnist(no_items)
     
     y_train_labels = mnist["training"]["labels"]
@@ -246,9 +274,8 @@ def main():
     network.load_training_data(X_train, y_train)
     network.normalize_inputs(255)
 
-    network.train(learning_rate=0.001, verbose=True)
+    network.train(learning_rate=0.5, verbose=True)
 
-    network.save_parameters("weights", "biases")
 
 
 if __name__ == "__main__":
