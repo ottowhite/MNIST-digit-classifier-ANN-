@@ -57,7 +57,7 @@ class MLP:
         self.activation_gradient = np.array(activation_gradient)
 
 
-    def train(self, learning_rate=0.01, verbose=True):
+    def train(self, learning_rate=0.01, verbose=True, record=True):
         self.learning_rate = learning_rate
 
 
@@ -66,21 +66,15 @@ class MLP:
 
             self._feed_forward(x)
             self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_train[x])
+            self._record(x) if record else False # records information about iteration, error, class and prediction
+
             self._calculate_gradients(x)
             self._adjust_network(self.learning_rate)
-
-            self._record(x)
             
-
-            if verbose == True:
-                # gets the highest index in the column vector, which is also equal to digit value
-                print(f"\nIteration:\t{x} / {(len(self.X_train) - 1)}")
-                print(f"Class:\t\t{np.argmax(self.y_train[x])}")
-                print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
-                print(f"Error:\t\t{self.error}")
+            self._speak(x) if verbose else False
                 
         
-        self._visualise_records()
+        self._visualise_records() if record else False
             
 
         
@@ -220,12 +214,21 @@ class MLP:
     def _visualise_records(self):
         self.record = pd.DataFrame(self.record)
 
-        plt.plot(self.record.iteration, self.record.error)
+        plt.plot(self.record["iteration"], self.record["error"])
         plt.xlabel("Iteration")
         plt.ylabel("Error")
         plt.title(f"Training network with structure {self.structure} with learning rate {self.learning_rate}")
         plt.show()
-        
+
+
+    def _speak(self, iteration):
+        # gets the highest index in the column vector, which is also equal to digit value
+        print(f"\nIteration:\t{iteration} / {(len(self.X_train) - 1)}")
+        print(f"Class:\t\t{np.argmax(self.y_train[iteration])}")
+        print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
+        print(f"Error:\t\t{self.error}")
+
+
 
 def read_mnist(no_items_each):
     data_locations = {
@@ -321,7 +324,7 @@ def main():
     network.normalize_inputs(255)
 
 
-    network.train(learning_rate=0.05, verbose=True)
+    network.train(learning_rate=0.05, verbose=True, record=True)
     network.test(X_test, y_test)
 
     if input("\nSave weights and biases? (y/n) ") == "y":
