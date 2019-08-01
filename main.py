@@ -83,8 +83,6 @@ class MLP:
 
                 self._speak(x) if verbose else False
                     
-            
-            self._visualise_records(smoothing_window=10) if record else False
         else:
             for x in range(len(self.X_train)):
 
@@ -102,7 +100,9 @@ class MLP:
                 self._speak(x) if verbose else False
                     
             
-            self._visualise_records(smoothing_window=10) if record else False
+        
+        self.record = pd.DataFrame(self.record) if record else None
+        
             
 
     def test(self):
@@ -310,9 +310,7 @@ class MLP:
         self.record["error"].append(self.error)
     
 
-    def _visualise_records(self, smoothing_window=None):
-        
-        self.record = pd.DataFrame(self.record)
+    def visualise_records(self, smoothing_window=None):
 
         if smoothing_window is None:
             plt.plot(self.record["iteration"], self.record["error"])
@@ -324,6 +322,9 @@ class MLP:
         plt.legend()
         plt.title(f"Training network with structure {self.structure} \nwith learning rate {self.learning_rate} over {len(self.X_train)} iterations\n with {self.momentum} momentum")
         plt.show()
+    
+    def save_records(self, filename):
+        self.record.to_csv(filename)
 
 
     def _speak(self, iteration):
@@ -418,12 +419,12 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(300)
+    format_mnist_training(10)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP(
-        structure=(784, 100, 80, 30, 10), 
+        structure=(784, 200, 80, 10), 
         weight_path=None, 
         bias_path=None)
 
@@ -431,17 +432,27 @@ def main():
     network.normalize_inputs(range=255, set_type="training")
     network.train(
         learning_rate=0.01,
-        momentum=0.5, 
+        momentum=0.7, 
         verbose=True, 
         record=True)
+
+    network.save_records("records.csv")
+    network.save_parameters("weights", "biases")
 
     network.load_testing_data(X_test, y_test)
     network.normalize_inputs(range=255, set_type="testing")
     network.test()
 
+    
 
+    network.visualise_records(smoothing_window=10)
+
+    '''
     if input("\nSave weights and biases? (y/n) ") == "y":
         network.save_parameters("weights", "biases")
+    '''
+
+    
 
 
 
