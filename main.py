@@ -14,6 +14,10 @@ class MLP:
         self.structure = structure
         self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
 
+        # the accumulator needs a zero initialisation to work on the first training example
+        self.weight_accumulator = 0
+        self.bias_accumulator = 0
+
         # for when progress should be graphed and recorded
         self.record = {
             "iteration": [],
@@ -37,7 +41,9 @@ class MLP:
 
             if i != 0:
                 if weight_path == None:
-                    weight.append(np.random.uniform(low=-0.5, high=0.5, size=(structure[i], structure[i-1])))
+
+                    # using Xavier weight initialisation in congruence with the tanh activation function
+                    weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])) * np.sqrt(1 / structure[i-1]) )
                 
                 if bias_path == None:
                     bias.append(np.zeros(shape=(structure[i], 1)))
@@ -57,9 +63,10 @@ class MLP:
         self.activation_gradient = np.array(activation_gradient)
 
 
-    def train(self, learning_rate=0.01, verbose=True, record=True, batch_size=None):
+    def train(self, learning_rate, momentum=None, verbose=True, record=True, batch_size=None):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.momentum = momentum
 
 
         # assumes that training data has been loaded and inputs normalised
@@ -73,7 +80,7 @@ class MLP:
 
                 self._calculate_gradients(x)
                 self._adjust_network(self.learning_rate)
-                
+
                 self._speak(x) if verbose else False
                     
             
@@ -282,8 +289,18 @@ class MLP:
 
 
     def _adjust_network(self, learning_rate):
-        self.weight -= learning_rate * self.weight_gradient
-        self.bias -= learning_rate * self.bias_gradient
+
+        if self.momentum is None:
+            # Normal weight updates
+            self.weight -= learning_rate * self.weight_gradient
+            self.bias -= learning_rate * self.bias_gradient
+        else:
+            # Using momentum to update weights
+            self.weight_accumulator = self.momentum * self.weight_accumulator + self.weight_gradient
+            self.bias_accumulator = self.momentum * self.bias_accumulator + self.bias_gradient
+
+            self.weight -= learning_rate * self.weight_accumulator
+            self.bias -= learning_rate * self.bias_accumulator
 
 
     def _record(self, iteration):
@@ -305,9 +322,8 @@ class MLP:
         plt.xlabel("Iteration")
         plt.ylabel("Error")
         plt.legend()
-        plt.title(f"Training network with structure {self.structure} \nwith learning rate {self.learning_rate} over {len(self.X_train)} iterations")
+        plt.title(f"Training network with structure {self.structure} \nwith learning rate {self.learning_rate} over {len(self.X_train)} iterations\n with {self.momentum} momentum")
         plt.show()
-
 
 
     def _speak(self, iteration):
@@ -316,7 +332,6 @@ class MLP:
         print(f"Class:\t\t{np.argmax(self.y_train[iteration])}")
         print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
         print(f"Error:\t\t{self.error}")
-
 
 
 def read_mnist(no_items_each):
@@ -403,15 +418,22 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(6500)
+    format_mnist_training(300)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
-    network = MLP(structure=(784, 200, 80, 10), weight_path='weights.npy', bias_path="biases.npy")
+    network = MLP(
+        structure=(784, 100, 80, 30, 10), 
+        weight_path=None, 
+        bias_path=None)
 
-    #network.load_training_data(X_train, y_train)
-    #network.normalize_inputs(range=255, set_type="training")
-    #network.train(learning_rate=0.01, verbose=True, record=True)
+    network.load_training_data(X_train, y_train)
+    network.normalize_inputs(range=255, set_type="training")
+    network.train(
+        learning_rate=0.01,
+        momentum=0.5, 
+        verbose=True, 
+        record=True)
 
     network.load_testing_data(X_test, y_test)
     network.normalize_inputs(range=255, set_type="testing")
