@@ -37,10 +37,10 @@ class MLP:
 
             if i != 0:
                 if weight_path == None:
-                    weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])))
+                    weight.append(np.random.uniform(low=-0.5, high=0.5, size=(structure[i], structure[i-1])))
                 
                 if bias_path == None:
-                    bias.append(np.random.uniform(low=-1, high=1, size=(structure[i], 1)))
+                    bias.append(np.zeros(shape=(structure[i], 1)))
 
                 weighted_sum.append(np.zeros(shape=(structure[i], 1)))
 
@@ -57,33 +57,53 @@ class MLP:
         self.activation_gradient = np.array(activation_gradient)
 
 
-    def train(self, learning_rate=0.01, verbose=True, record=True):
+    def train(self, learning_rate=0.01, verbose=True, record=True, batch_size=None):
         self.learning_rate = learning_rate
+        self.batch_size = batch_size
 
 
         # assumes that training data has been loaded and inputs normalised
-        for x in range(len(self.X_train)):
+        if batch_size == None:
+            # pure stochastic gradient descent with a batch size of 1
+            for x in range(len(self.X_train)):
 
-            self._feed_forward(x)
-            self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_train[x])
-            self._record(x) if record else False # records information about iteration, error, class and prediction
+                self._feed_forward(x)
+                self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_train[x])
+                self._record(x) if record else False # records information about iteration, error, class and prediction
 
-            self._calculate_gradients(x)
-            self._adjust_network(self.learning_rate)
-            
-            self._speak(x) if verbose else False
+                self._calculate_gradients(x)
+                self._adjust_network(self.learning_rate)
                 
-        
-        self._visualise_records() if record else False
+                self._speak(x) if verbose else False
+                    
             
+            self._visualise_records(smoothing_window=10) if record else False
+        else:
+            for x in range(len(self.X_train)):
 
-        
+                self._feed_forward(x)
+                self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_train[x])
+                self._record(x) if record else False # records information about iteration, error, class and prediction
 
+                self._accumulate_gradients(x)
+
+                if (x + 1) % self.batch_size == 0 and x != 0:
+                    self._divide_gradients()
+                    self._adjust_network(self.learning_rate)
+                    self._reset_all_gradients()
+                
+                self._speak(x) if verbose else False
+                    
+            
+            self._visualise_records(smoothing_window=10) if record else False
+            
 
     def test(self, X_test, y_test):
         total_tests = len(X_test)
         correct_tests = 0
         total_error = 0
+
+        ipdb.set_trace()
         
         for x in range(len(X_test)-1):
             self._feed_forward(x, test_set=X_test)
@@ -124,29 +144,26 @@ class MLP:
             # of the current layer, plus the bias
             self.weighted_sum[i] = np.dot(self.weight[i], self.activation[i]) + self.bias[i]
 
-            # the activation of the next layer equals the sigmoid(weighted sum)
-            vsig = np.vectorize(self._sigmoid) # allows me to use the approximated sigmoid function
-
-            self.activation[i+1] = vsig(self.weighted_sum[i])  # changes the activation of the next layer
+            self.activation[i+1] = self._tanh(self.weighted_sum[i])  # changes the activation of the next layer
     
 
     def _sigmoid(self, x):
         # approximating the function because when x > 36, _sigmoid(x) rounds to 1,
         # mirrored the effect on the other side for evenness
         # performing logic in this function requires me to use vectorised version
-        
-        if x > 36:
-            result = 1
-        elif x < -36:
-            result = 0
-        else:
-            result = 1 / (1 + np.exp(-x))
+        return 1 / (1 + np.exp(-x))
 
-        return result
+
+    def _tanh(self, x):
+        return np.tanh(x)
 
 
     def _sigmoid_derivative(self, x):
         return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
+        
+    
+    def _tanh_derivative(self, x):
+        return 1.0 - np.tanh(x)**2
 
 
     def _mean_sum_squared_errors(self, output, desired):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
@@ -160,6 +177,23 @@ class MLP:
         for i in range(len(self.structure)):
             activation_gradient.append(np.zeros(shape=(self.structure[i], 1)))
         
+        self.activation_gradient = np.array(activation_gradient)
+
+
+    def _reset_all_gradients(self):
+        weight_gradient = []
+        bias_gradient = []
+        activation_gradient = []
+
+        for i in range(len(self.structure)):
+            activation_gradient.append(np.zeros(shape=(self.structure[i], 1)))
+
+            if i != 0:
+                weight_gradient.append(np.zeros(shape=(self.structure[i], self.structure[i-1])))
+                bias_gradient.append(np.zeros(shape=(self.structure[i], 1)))
+
+        self.weight_gradient = np.array(weight_gradient)
+        self.bias_gradient = np.array(bias_gradient)
         self.activation_gradient = np.array(activation_gradient)
 
 
@@ -178,10 +212,10 @@ class MLP:
         for layer in reversed(range(len(self.activation)-1)):
 
             # partial derivatives of the output with respect to the weighted sums
-            o__z = self._sigmoid_derivative(self.weighted_sum[layer])
+            o__z = self._tanh_derivative(self.weighted_sum[layer])
 
             # for calculations for the rest of the derivatives
-            a__z = self._sigmoid_derivative(self.weighted_sum[layer])
+            a__z = self._tanh_derivative(self.weighted_sum[layer])
 
             for j in range(len(self.activation[layer + 1])):
                 for k in range(len(self.activation[layer])):
@@ -199,6 +233,47 @@ class MLP:
                         self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
     
 
+    def _accumulate_gradients(self, current_training_example):
+        # used for batch gradient descent when the batch size is greater than 1,
+        # therefore requiring that the gradients must accumulate to find the mean
+        
+        # note that "__" denotes "with respect to"
+
+        # for calculating gradients of the first set of weights and biases
+        # partial derivatives (column vector) of the cost with respect to the outputs
+        c__o = 2 * (self.activation[-1] - self.y_train[current_training_example])
+
+
+        # calculate the rest of the weights and biases starting at the layer preceding the last layer
+        for layer in reversed(range(len(self.activation)-1)):
+
+            # partial derivatives of the output with respect to the weighted sums
+            o__z = self._tanh_derivative(self.weighted_sum[layer])
+
+            # for calculations for the rest of the derivatives
+            a__z = self._tanh_derivative(self.weighted_sum[layer])
+
+            for j in range(len(self.activation[layer + 1])):
+                for k in range(len(self.activation[layer])):
+                    
+                    if layer == (len(self.activation) - 2):
+                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * o__z[j] * c__o[j]
+                        self.bias_gradient[layer][j] += o__z[j] * c__o[j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * o__z[j] * c__o[j]
+                    elif layer != (len(self.activation) - 2) and layer > 0:
+                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] += a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                    else:
+                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] += a__z[j] * self.activation_gradient[layer + 1][j]
+
+
+    def _divide_gradients(self):
+        self.weight_gradient = self.weight_gradient / self.batch_size
+        self.bias_gradient = self.bias_gradient / self.batch_size
+
+
     def _adjust_network(self, learning_rate):
         self.weight -= learning_rate * self.weight_gradient
         self.bias -= learning_rate * self.bias_gradient
@@ -211,14 +286,21 @@ class MLP:
         self.record["error"].append(self.error)
     
 
-    def _visualise_records(self):
+    def _visualise_records(self, smoothing_window=None):
+        
         self.record = pd.DataFrame(self.record)
 
-        plt.plot(self.record["iteration"], self.record["error"])
+        if smoothing_window is None:
+            plt.plot(self.record["iteration"], self.record["error"])
+        else:
+            plt.plot(self.record["iteration"], self.record["error"], label="actual")
+            plt.plot(self.record["iteration"], self.record["error"].rolling(window=smoothing_window).mean(), label=f"{smoothing_window} item mean smoothing")
         plt.xlabel("Iteration")
         plt.ylabel("Error")
-        plt.title(f"Training network with structure {self.structure} with learning rate {self.learning_rate}")
+        plt.legend()
+        plt.title(f"Training network with structure {self.structure} \nwith learning rate {self.learning_rate} over {len(self.X_train)} iterations")
         plt.show()
+
 
 
     def _speak(self, iteration):
@@ -314,18 +396,17 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(5)
+    format_mnist_training(6500)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
-    network = MLP(structure=(784, 200, 80, 10))
+    network = MLP(structure=(784, 200, 80, 10), weight_path='weights.npy', bias_path="biases.npy")
 
     network.load_training_data(X_train, y_train)
     network.normalize_inputs(255)
-
-
-    network.train(learning_rate=0.05, verbose=True, record=True)
+    network.train(learning_rate=0.01, verbose=True, record=True)
     network.test(X_test, y_test)
+
 
     if input("\nSave weights and biases? (y/n) ") == "y":
         network.save_parameters("weights", "biases")
