@@ -98,20 +98,19 @@ class MLP:
             self._visualise_records(smoothing_window=10) if record else False
             
 
-    def test(self, X_test, y_test):
-        total_tests = len(X_test)
+    def test(self):
+        total_tests = len(self.X_test)
         correct_tests = 0
         total_error = 0
 
-        ipdb.set_trace()
         
         for x in range(len(X_test)-1):
-            self._feed_forward(x, test_set=X_test)
-            self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], y_test[x])
+            self._feed_forward(x, test_set=self.X_test)
+            self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_test[x])
 
             total_error += self.error
 
-            if np.argmax(self.activation[self.NUMBER_OF_LAYERS]) == np.argmax(y_test[x]):
+            if np.argmax(self.activation[self.NUMBER_OF_LAYERS]) == np.argmax(self.y_test[x]):
                 correct_tests += 1
 
         mean_error = total_error / total_tests
@@ -121,14 +120,22 @@ class MLP:
         print(f"Percent accurate: {percent_correct}")
 
 
-    def normalize_inputs(self, range):
+    def normalize_inputs(self, range, set_type="training"):
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
-        self.X_train = self.X_train / range
+        if set_type == "training":
+            self.X_train = self.X_train / range
+        elif set_type == "testing":
+            self.X_test = self.X_test / range
 
 
     def load_training_data(self, X_train, y_train):
         # creates instance variables containing all training data
         self.X_train, self.y_train = (X_train, y_train)
+
+
+    def load_testing_data(self, X_test, y_test):
+        # creates instance variables containing all training data
+        self.X_test, self.y_test = (X_test, y_test)
 
 
     def save_parameters(self, weight_path, bias_path):
@@ -402,10 +409,13 @@ def main():
     # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP(structure=(784, 200, 80, 10), weight_path='weights.npy', bias_path="biases.npy")
 
-    network.load_training_data(X_train, y_train)
-    network.normalize_inputs(255)
-    network.train(learning_rate=0.01, verbose=True, record=True)
-    network.test(X_test, y_test)
+    #network.load_training_data(X_train, y_train)
+    #network.normalize_inputs(range=255, set_type="training")
+    #network.train(learning_rate=0.01, verbose=True, record=True)
+
+    network.load_testing_data(X_test, y_test)
+    network.normalize_inputs(range=255, set_type="testing")
+    network.test()
 
 
     if input("\nSave weights and biases? (y/n) ") == "y":
