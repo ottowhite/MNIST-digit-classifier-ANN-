@@ -335,14 +335,12 @@ class MLP:
         print(f"Error:\t\t{self.error}")
 
 
-def read_mnist(no_items_each):
+def read_mnist_train(no_items_each):
     data_locations = {
-        "testing": {"data": "data/t10k-images-idx3-ubyte", "labels": "data/t10k-labels-idx1-ubyte"},
         "training": {"data": "data/train-images-idx3-ubyte", "labels": "data/train-labels-idx1-ubyte"}
     }
 
-    all_data = [open(data_locations["training"]["data"], "rb"), open(data_locations["training"]["labels"], "rb"),
-                open(data_locations["testing"]["data"], "rb"), open(data_locations["testing"]["labels"], "rb")]
+    all_data = [open(data_locations["training"]["data"], "rb"), open(data_locations["training"]["labels"], "rb")]
 
     for x in range(0, len(all_data)):
         all_data[x].seek(0)
@@ -361,7 +359,28 @@ def read_mnist(no_items_each):
             no_labels = st.unpack(">I", all_data[x].read(4))[0]
             y_train = np.asarray(st.unpack(">" + "B" * no_items_each, all_data[x].read(no_items_each)))
 
-        elif x == 2:
+    formatted_data = {
+        "training": {"data": X_train, "labels": y_train},
+    }
+
+    for reader in all_data:
+        reader.close()
+
+    return formatted_data
+
+def read_mnist_test(no_items_each):
+    data_locations = {
+        "testing": {"data": "data/t10k-images-idx3-ubyte", "labels": "data/t10k-labels-idx1-ubyte"},
+        "training": {"data": "data/train-images-idx3-ubyte", "labels": "data/train-labels-idx1-ubyte"}
+    }
+
+    all_data = [open(data_locations["testing"]["data"], "rb"), open(data_locations["testing"]["labels"], "rb")]
+
+    for x in range(0, len(all_data)):
+        all_data[x].seek(0)
+        st.unpack(">I", all_data[x].read(4))[0]
+
+        if x == 0:
             no_images = st.unpack(">I", all_data[x].read(4))[0]
             no_rows = st.unpack(">I", all_data[x].read(4))[0]
             no_columns = st.unpack(">I", all_data[x].read(4))[0]
@@ -370,13 +389,12 @@ def read_mnist(no_items_each):
             X_test = np.asarray(
                 st.unpack(">" + "B" * 784 * no_items_each, all_data[x].read(784 * no_items_each)), dtype=np.float).reshape(
                 no_items_each, 784)
-        elif x == 3:
+        elif x == 1:
             no_labels = st.unpack(">I", all_data[x].read(4))[0]
             y_test = np.asarray(st.unpack(">" + "B" * no_items_each, all_data[x].read(no_items_each)))
 
     formatted_data = {
-        "testing": {"data": X_test, "labels": y_test},
-        "training": {"data": X_train, "labels": y_train}
+        "testing": {"data": X_test, "labels": y_test}
     }
 
     for reader in all_data:
@@ -391,7 +409,7 @@ def main():
         global X_train
         global y_train
         
-        mnist = read_mnist(no_items)
+        mnist = read_mnist_train(no_items)
         
         y_train_labels = mnist["training"]["labels"]
 
@@ -408,7 +426,7 @@ def main():
         global X_test
         global y_test
 
-        mnist = read_mnist(no_items)
+        mnist = read_mnist_test(no_items)
         
         y_test_labels = mnist["testing"]["labels"]
 
@@ -419,7 +437,7 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(10)
+    format_mnist_training(60000)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
@@ -451,9 +469,6 @@ def main():
     if input("\nSave weights and biases? (y/n) ") == "y":
         network.save_parameters("weights", "biases")
     '''
-
-    
-
 
 
 if __name__ == "__main__":
