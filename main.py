@@ -232,32 +232,46 @@ class MLP:
             gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
 
             if layer == (len(self.activation) - 2):
+                
+                # calculating the derivative that gives access to weights and biases outside the loop massively speeds up calcs
+                # because the calculation is vectorised and never needs to repeat
+                gateway_derivative = gradient_activation__weighted_sum * gradient_cost__output
+
                 for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
                     for k in range(len(self.activation[layer])): # iterating over all relative input layers
 
-                        # calculating the gradients of the last set of weights, biases, and previous activations with partial chain rules
+                        # calculating the gradients of the last set of weights, and previous activations with partial chain rules
                         
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
-                        self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * gradient_cost__output[j]
-                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gateway_derivative[j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gateway_derivative[j]
+                
+                # can move the bias gradient calculatatios outside as they are not dependant on the
+                self.bias_gradient[layer] = gradient_activation__weighted_sum * gradient_cost__output
             elif layer != (len(self.activation) - 2) and layer > 0:
+                
+                gateway_derivative = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
+                
                 for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
                     for k in range(len(self.activation[layer])): # iterating over all relative input layers
             
-                        # calculating all of the gradients of the weights, biases and activations of the hidden layers except last layer
+                        # calculating all of the gradients of the weights and activations of the hidden layers except last layer
 
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
-                        self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
-                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gateway_derivative[j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gateway_derivative[j]
+                
+                # can move the bias gradient calculatatios outside as they are not dependant on the loop
+                self.bias_gradient[layer] = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
             else:
+                gateway_derivative = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
                 for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
                     for k in range(len(self.activation[layer])): # iterating over all relative input layers
                 
-                        # on the first set of weights and biases, exclude the calculation of the activation gradients as they are
-                        # unnecessary and require lots of computation
-
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
-                        self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        # on the first set of weights (last to be calculated), 
+                        # exclude the calculation of the activation gradients as they are unnecessary and require lots of computation
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gateway_derivative[j]
+               
+                # can move the bias gradient calculatatios outside as they are not dependant on the loop
+                self.bias_gradient[layer] = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
         
         self.total_time = dt.datetime.now() - start_time
     
@@ -466,7 +480,7 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(10000)
+    format_mnist_training(100)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
