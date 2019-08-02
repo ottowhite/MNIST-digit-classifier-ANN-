@@ -228,24 +228,31 @@ class MLP:
         for layer in reversed(range(len(self.activation)-1)):
 
             # partial derivatives of the output with respect to the weighted sum
+
             gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
 
-            for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
-                for k in range(len(self.activation[layer])): # iterating over all relative input layers
-                    
-                    if layer == (len(self.activation) - 2):
-                        # calculating the gradients of the last set of weights, biases, and previous activations with partial chain rules
+            if layer == (len(self.activation) - 2):
+                for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
+                    for k in range(len(self.activation[layer])): # iterating over all relative input layers
 
+                        # calculating the gradients of the last set of weights, biases, and previous activations with partial chain rules
+                        
                         self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
                         self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * gradient_cost__output[j]
                         self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
-                    elif layer != (len(self.activation) - 2) and layer > 0:
+            elif layer != (len(self.activation) - 2) and layer > 0:
+                for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
+                    for k in range(len(self.activation[layer])): # iterating over all relative input layers
+            
                         # calculating all of the gradients of the weights, biases and activations of the hidden layers except last layer
 
                         self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
                         self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
                         self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
-                    else:
+            else:
+                for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
+                    for k in range(len(self.activation[layer])): # iterating over all relative input layers
+                
                         # on the first set of weights and biases, exclude the calculation of the activation gradients as they are
                         # unnecessary and require lots of computation
 
