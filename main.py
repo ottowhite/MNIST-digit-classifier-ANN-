@@ -236,42 +236,39 @@ class MLP:
                 # calculating the derivative that gives access to weights and biases outside the loop massively speeds up calcs
                 # because the calculation is vectorised and never needs to repeat
                 gateway_derivative = gradient_activation__weighted_sum * gradient_cost__output
+                self.bias_gradient[layer] = gateway_derivative
 
                 for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
+                    
+                    # is the same as calculating inside the next loop, but more efficient outside
+                    self.weight_gradient[layer][j] = self.activation[layer].T * gateway_derivative[j]
+
                     for k in range(len(self.activation[layer])): # iterating over all relative input layers
 
                         # calculating the gradients of the last set of weights, and previous activations with partial chain rules
-                        
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gateway_derivative[j]
                         self.activation_gradient[layer][k] += self.weight[layer][j][k] * gateway_derivative[j]
                 
-                # can move the bias gradient calculatatios outside as they are not dependant on the
-                self.bias_gradient[layer] = gradient_activation__weighted_sum * gradient_cost__output
             elif layer != (len(self.activation) - 2) and layer > 0:
                 
                 gateway_derivative = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
-                
+                self.bias_gradient[layer] = gateway_derivative
+
                 for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
+                    
+                    self.weight_gradient[layer][j] = self.activation[layer].T * gateway_derivative[j]
+
                     for k in range(len(self.activation[layer])): # iterating over all relative input layers
             
                         # calculating all of the gradients of the weights and activations of the hidden layers except last layer
-
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gateway_derivative[j]
                         self.activation_gradient[layer][k] += self.weight[layer][j][k] * gateway_derivative[j]
-                
-                # can move the bias gradient calculatatios outside as they are not dependant on the loop
-                self.bias_gradient[layer] = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
+
             else:
                 gateway_derivative = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
+                self.bias_gradient[layer] = gateway_derivative
+
                 for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
-                    for k in range(len(self.activation[layer])): # iterating over all relative input layers
-                
-                        # on the first set of weights (last to be calculated), 
-                        # exclude the calculation of the activation gradients as they are unnecessary and require lots of computation
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gateway_derivative[j]
-               
-                # can move the bias gradient calculatatios outside as they are not dependant on the loop
-                self.bias_gradient[layer] = gradient_activation__weighted_sum * self.activation_gradient[layer + 1]
+
+                    self.weight_gradient[layer][j] = self.activation[layer].T * gateway_derivative[j]
         
         self.total_time = dt.datetime.now() - start_time
     
@@ -480,7 +477,7 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(100)
+    format_mnist_training(60000)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
