@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 np.set_printoptions(linewidth=1000)
 
+import datetime as dt
+ 
 import warnings
 warnings.filterwarnings("error")
 
@@ -102,8 +104,7 @@ class MLP:
             
         
         self.record = pd.DataFrame(self.record) if record else None
-        
-            
+
 
     def test(self):
         total_tests = len(self.X_test)
@@ -174,8 +175,8 @@ class MLP:
 
     def _sigmoid_derivative(self, x):
         return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
-        
     
+
     def _tanh_derivative(self, x):
         return 1.0 - np.tanh(x)**2
 
@@ -212,6 +213,7 @@ class MLP:
 
 
     def _calculate_gradients(self, current_training_example):
+        start_time = dt.datetime.now()
         # note that "__" denotes "with respect to"
 
         # reset activation gradients before each calculation because they are cumulative
@@ -219,32 +221,38 @@ class MLP:
 
         # for calculating gradients of the first set of weights and biases
         # partial derivatives (column vector) of the cost with respect to the outputs
-        c__o = 2 * (self.activation[-1] - self.y_train[current_training_example])
+        gradient_cost__output = 2 * (self.activation[-1] - self.y_train[current_training_example])
 
 
         # calculate the rest of the weights and biases starting at the layer preceding the last layer
         for layer in reversed(range(len(self.activation)-1)):
 
-            # partial derivatives of the output with respect to the weighted sums
-            o__z = self._tanh_derivative(self.weighted_sum[layer])
+            # partial derivatives of the output with respect to the weighted sum
+            gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
 
-            # for calculations for the rest of the derivatives
-            a__z = self._tanh_derivative(self.weighted_sum[layer])
-
-            for j in range(len(self.activation[layer + 1])):
-                for k in range(len(self.activation[layer])):
+            for j in range(len(self.activation[layer + 1])): # iterating over all relative output layers
+                for k in range(len(self.activation[layer])): # iterating over all relative input layers
                     
                     if layer == (len(self.activation) - 2):
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * o__z[j] * c__o[j]
-                        self.bias_gradient[layer][j] = o__z[j] * c__o[j]
-                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * o__z[j] * c__o[j]
+                        # calculating the gradients of the last set of weights, biases, and previous activations with partial chain rules
+
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
+                        self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * gradient_cost__output[j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
                     elif layer != (len(self.activation) - 2) and layer > 0:
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
-                        self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
-                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        # calculating all of the gradients of the weights, biases and activations of the hidden layers except last layer
+
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
                     else:
-                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
-                        self.bias_gradient[layer][j] = a__z[j] * self.activation_gradient[layer + 1][j]
+                        # on the first set of weights and biases, exclude the calculation of the activation gradients as they are
+                        # unnecessary and require lots of computation
+
+                        self.weight_gradient[layer][j][k] = self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] = gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+        
+        self.total_time = dt.datetime.now() - start_time
     
 
     def _accumulate_gradients(self, current_training_example):
@@ -255,35 +263,37 @@ class MLP:
 
         # for calculating gradients of the first set of weights and biases
         # partial derivatives (column vector) of the cost with respect to the outputs
-        c__o = 2 * (self.activation[-1] - self.y_train[current_training_example])
+        gradient_cost__output = 2 * (self.activation[-1] - self.y_train[current_training_example])
 
 
         # calculate the rest of the weights and biases starting at the layer preceding the last layer
         for layer in reversed(range(len(self.activation)-1)):
 
             # partial derivatives of the output with respect to the weighted sums
-            o__z = self._tanh_derivative(self.weighted_sum[layer])
+            gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
 
             # for calculations for the rest of the derivatives
-            a__z = self._tanh_derivative(self.weighted_sum[layer])
+            gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
 
             for j in range(len(self.activation[layer + 1])):
                 for k in range(len(self.activation[layer])):
                     
                     if layer == (len(self.activation) - 2):
-                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * o__z[j] * c__o[j]
-                        self.bias_gradient[layer][j] += o__z[j] * c__o[j]
-                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * o__z[j] * c__o[j]
+                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
+                        self.bias_gradient[layer][j] += gradient_activation__weighted_sum[j] * gradient_cost__output[j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * gradient_cost__output[j]
                     elif layer != (len(self.activation) - 2) and layer > 0:
-                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
-                        self.bias_gradient[layer][j] += a__z[j] * self.activation_gradient[layer + 1][j]
-                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] += gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.activation_gradient[layer][k] += self.weight[layer][j][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
                     else:
-                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * a__z[j] * self.activation_gradient[layer + 1][j]
-                        self.bias_gradient[layer][j] += a__z[j] * self.activation_gradient[layer + 1][j]
+                        self.weight_gradient[layer][j][k] += self.activation[layer][k] * gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
+                        self.bias_gradient[layer][j] += gradient_activation__weighted_sum[j] * self.activation_gradient[layer + 1][j]
 
 
     def _divide_gradients(self):
+        # used when calculating the mean of all gradients in batch gradient descent
+        
         self.weight_gradient = self.weight_gradient / self.batch_size
         self.bias_gradient = self.bias_gradient / self.batch_size
 
@@ -291,11 +301,14 @@ class MLP:
     def _adjust_network(self, learning_rate):
 
         if self.momentum is None:
-            # Normal weight updates
+            # using normal gradient descent to update weights
+
             self.weight -= learning_rate * self.weight_gradient
             self.bias -= learning_rate * self.bias_gradient
         else:
-            # Using momentum to update weights
+            # using momentum to update weights
+            # weight accumulators are initialized to 0 in the contructor
+
             self.weight_accumulator = self.momentum * self.weight_accumulator + self.weight_gradient
             self.bias_accumulator = self.momentum * self.bias_accumulator + self.bias_gradient
 
@@ -304,25 +317,27 @@ class MLP:
 
 
     def _record(self, iteration):
+        # called inside the training loop to create a dictionary of the training history
+        # is converted to a dataframe at the end of the training loop
+       
         self.record["iteration"].append(iteration)
         self.record["class"].append(np.argmax(self.y_train[iteration]))
         self.record["prediction"].append(np.argmax(self.activation[self.NUMBER_OF_LAYERS]))
         self.record["error"].append(self.error)
     
 
-    def visualise_records(self, smoothing_window=None):
+    def visualise_records(self):
+        smoothing_window = len(self.X_train) // 30 if len(self.X_train) > 60 else 10
 
-        if smoothing_window is None:
-            plt.plot(self.record["iteration"], self.record["error"])
-        else:
-            plt.plot(self.record["iteration"], self.record["error"], label="actual")
-            plt.plot(self.record["iteration"], self.record["error"].rolling(window=smoothing_window).mean(), label=f"{smoothing_window} item mean smoothing")
+        plt.plot(self.record["iteration"], self.record["error"], label="actual")
+        plt.plot(self.record["iteration"], self.record["error"].rolling(window=smoothing_window).mean(), label=f"{smoothing_window} item mean smoothing")
         plt.xlabel("Iteration")
         plt.ylabel("Error")
         plt.legend()
         plt.title(f"Training network with structure {self.structure} \nwith learning rate {self.learning_rate} over {len(self.X_train)} iterations\n with {self.momentum} momentum")
         plt.show()
     
+
     def save_records(self, filename):
         self.record.to_csv(filename)
 
@@ -333,6 +348,12 @@ class MLP:
         print(f"Class:\t\t{np.argmax(self.y_train[iteration])}")
         print(f"Prediction:\t{np.argmax(self.activation[self.NUMBER_OF_LAYERS])}")
         print(f"Error:\t\t{self.error}")
+        
+        print(f"Calc grad: \t{self.total_time}")
+        print(f"ETR: \t\t{self._remaining_time(iteration, self.total_time)}")
+    
+    def _remaining_time(self, iteration, average_time):
+        return (len(self.X_train) - iteration) * average_time
 
 
 def read_mnist_train(no_items_each):
@@ -367,6 +388,7 @@ def read_mnist_train(no_items_each):
         reader.close()
 
     return formatted_data
+
 
 def read_mnist_test(no_items_each):
     data_locations = {
@@ -437,7 +459,7 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(60000)
+    format_mnist_training(10000)
     format_mnist_testing(10000)
 
     # create network and load up the training data, normalise inputs (between 0 and 1)
@@ -454,8 +476,8 @@ def main():
         verbose=True, 
         record=True)
 
-    network.save_records("records.csv")
-    network.save_parameters("weights", "biases")
+    #network.save_records("records.csv")
+    #network.save_parameters("weights", "biases")
 
     network.load_testing_data(X_test, y_test)
     network.normalize_inputs(range=255, set_type="testing")
@@ -463,7 +485,7 @@ def main():
 
     
 
-    network.visualise_records(smoothing_window=10)
+    network.visualise_records()
 
     '''
     if input("\nSave weights and biases? (y/n) ") == "y":
