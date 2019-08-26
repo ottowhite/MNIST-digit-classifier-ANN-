@@ -12,8 +12,9 @@ warnings.filterwarnings("error")
 
 class MLP:
 
-    def __init__(self, structure, weight_path=None, bias_path=None):
+    def __init__(self, structure, activation_function, weight_path=None, bias_path=None):
         self.structure = structure
+        self.activation_function = activation_function
         self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
 
         # the accumulator needs a zero initialisation to work on the first training example
@@ -163,34 +164,25 @@ class MLP:
             # of the current layer, plus the bias
             self.weighted_sum[i] = np.dot(self.weight[i], self.activation[i]) + self.bias[i]
 
-            self.activation[i+1] = self._tanh(self.weighted_sum[i])  # changes the activation of the next layer
+            self.activation[i+1] = self._activate(x=self.weighted_sum[i], type=self.activation_function)  # changes the activation of the next layer
     
 
-    def _sigmoid(self, x):
-        # approximating the function because when x > 36, _sigmoid(x) rounds to 1,
-        # mirrored the effect on the other side for evenness
-        # performing logic in this function requires me to use vectorised version
-        return 1 / (1 + np.exp(-x))
+    def _activate(self, x, type='tanh'):
+        if type == 'sigmoid':
+            return 1 / (1 + np.exp(-x))
+        elif type == 'tanh':
+            return np.tanh(x)
+        elif type == 'softsign':
+            return x / (1 + np.absolute(x))
 
 
-    def _tanh(self, x):
-        return np.tanh(x)
-
-
-    def _softsign(self, x):
-        return x / (1 + np.absolute(x))
-
-
-    def _sigmoid_derivative(self, x):
-        return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
-    
-
-    def _tanh_derivative(self, x):
-        return 1.0 - np.tanh(x)**2
-
-
-    def _softsign_derivative(self, x):
-        return 1 / np.power((1 + np.absolute(x)), 2)
+    def _activation_gradient(self, x, type='tanh'):
+        if type == 'sigmoid':
+            return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
+        elif type == 'tanh':
+            return 1.0 - np.power(np.tanh(x), 2)
+        elif type == 'softsign':
+            return 1 / np.power((1 + np.absolute(x)), 2)
 
 
     def _mean_sum_squared_errors(self, output, desired):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
@@ -241,7 +233,7 @@ class MLP:
 
             # partial derivatives of the output with respect to the weighted sum
 
-            gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
+            gradient_activation__weighted_sum = self._activation_gradient(x=self.weighted_sum[layer], type=self.activation_function)
 
             if layer == (len(self.activation) - 2):
                 
@@ -488,40 +480,46 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(100)
+    format_mnist_training(800)
     format_mnist_testing(10000)
 
     
     # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP(
-        structure=(784, 16, 16, 10), 
+        structure=(784, 200, 80, 10), 
+        activation_function='tanh',
         weight_path=None, 
         bias_path=None)
 
     network.load_training_data(X_train, y_train)
     network.normalize(set_type="training")
 
-    for x in range(3):
-        network.train(
-            learning_rate=0.0001,
-            momentum=0.65, 
-            verbose=True, 
-            record=True)
+    network.train(
+        learning_rate=0.001,
+        momentum=0.6, 
+        verbose=True, 
+        record=True)
 
+    '''
+    if input("\nVisualise records? (y/n) ") == "y":
+        network.visualise_records()
+    
+    if input("\nTest the network? (y/n) ") == "y":
+        network.load_testing_data(X_test, y_test)
+        network.normalize(set_type="testing")
+        network.test()
+    '''
+    network.visualise_records()
 
-        if input("\nVisualise records? (y/n) ") == "y":
-            network.visualise_records()
-        
-        if input("\nTest the network? (y/n) ") == "y":
-            network.load_testing_data(X_test, y_test)
-            network.normalize(set_type="testing")
-            network.test()
+    network.load_testing_data(X_test, y_test)
+    network.normalize(set_type="testing")
+    network.test()
 
-        if input("\nSave weights and biases? (y/n) ") == "y":
-            network.save_parameters("weights", "biases")
-        
-        if input("\nInspect the network state? (y/n) ") == "y":
-            ipdb.set_trace()
+    if input("\nSave weights and biases? (y/n) ") == "y":
+        network.save_parameters("weights", "biases")
+    
+    if input("\nInspect the network state? (y/n) ") == "y":
+        ipdb.set_trace()
 
 
 if __name__ == "__main__":
