@@ -20,13 +20,7 @@ class MLP:
         self.weight_accumulator = 0
         self.bias_accumulator = 0
 
-        # for when progress should be graphed and recorded
-        self.record = {
-            "iteration": [],
-            "class": [],
-            "prediction": [],
-            "error": []
-        }
+        
 
         activation = []
         weight = []
@@ -45,7 +39,9 @@ class MLP:
                 if weight_path == None:
 
                     # using Xavier weight initialisation in congruence with the tanh activation function
-                    weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])) * np.sqrt(1 / structure[i-1]) )
+                    # weight.append(np.random.uniform(low=-(1/np.sqrt(structure[i-1])), high=(1/np.sqrt(structure[i-1])), size=(structure[i], structure[i-1])))
+                    weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])) * np.sqrt(1 / structure[i-1]) )
+                    # weight.append(np.random.normal(loc=0, scale=0, size=(structure[i], structure[i-1])) * np.sqrt(6 / structure[i-1] + structure[i]) )
                 
                 if bias_path == None:
                     bias.append(np.zeros(shape=(structure[i], 1)))
@@ -128,12 +124,20 @@ class MLP:
         print(f"Percent accurate: {percent_correct}")
 
 
-    def normalize_inputs(self, range, set_type="training"):
+    def normalize(self, set_type="training"):
+        
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
         if set_type == "training":
-            self.X_train = self.X_train / range
+            set_minimum = np.min(self.X_train)
+            set_range = np.ptp(self.X_train)
+
+            self.X_train = (self.X_train - set_minimum) / set_range
+
         elif set_type == "testing":
-            self.X_test = self.X_test / range
+            set_minimum = np.min(self.X_train)
+            set_range = np.ptp(self.X_train)
+
+            self.X_test = (self.X_test - set_minimum) / set_range
 
 
     def load_training_data(self, X_train, y_train):
@@ -173,12 +177,20 @@ class MLP:
         return np.tanh(x)
 
 
+    def _softsign(self, x):
+        return x / (1 + np.absolute(x))
+
+
     def _sigmoid_derivative(self, x):
         return np.exp(-x) / np.power((1 + np.exp(-x)), 2)
     
 
     def _tanh_derivative(self, x):
         return 1.0 - np.tanh(x)**2
+
+
+    def _softsign_derivative(self, x):
+        return 1 / np.power((1 + np.absolute(x)), 2)
 
 
     def _mean_sum_squared_errors(self, output, desired):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
@@ -284,9 +296,6 @@ class MLP:
             # partial derivatives of the output with respect to the weighted sums
             gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
 
-            # for calculations for the rest of the derivatives
-            gradient_activation__weighted_sum = self._tanh_derivative(self.weighted_sum[layer])
-
             for j in range(len(self.activation[layer + 1])):
                 for k in range(len(self.activation[layer])):
                     
@@ -331,6 +340,13 @@ class MLP:
     def _record(self, iteration):
         # called inside the training loop to create a dictionary of the training history
         # is converted to a dataframe at the end of the training loop
+        if iteration == 0:
+            self.record = {
+                "iteration": [],
+                "class": [],
+                "prediction": [],
+                "error": []
+            }
        
         self.record["iteration"].append(iteration)
         self.record["class"].append(np.argmax(self.y_train[iteration]))
@@ -364,6 +380,7 @@ class MLP:
         print(f"Calc grad: \t{self.total_time}")
         print(f"ETR: \t\t{self._remaining_time(iteration, self.total_time)}")
     
+
     def _remaining_time(self, iteration, average_time):
         return (len(self.X_train) - iteration) * average_time
 
@@ -474,35 +491,37 @@ def main():
     format_mnist_training(100)
     format_mnist_testing(10000)
 
+    
     # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP(
-        structure=(784, 200, 80, 10), 
+        structure=(784, 16, 16, 10), 
         weight_path=None, 
         bias_path=None)
 
     network.load_training_data(X_train, y_train)
-    network.normalize_inputs(range=255, set_type="training")
-    network.train(
-        learning_rate=0.01,
-        momentum=0.7, 
-        verbose=True, 
-        record=True)
+    network.normalize(set_type="training")
 
-    #network.save_records("records.csv")
-    #network.save_parameters("weights", "biases")
+    for x in range(3):
+        network.train(
+            learning_rate=0.0001,
+            momentum=0.65, 
+            verbose=True, 
+            record=True)
 
-    network.load_testing_data(X_test, y_test)
-    network.normalize_inputs(range=255, set_type="testing")
-    network.test()
 
-    
+        if input("\nVisualise records? (y/n) ") == "y":
+            network.visualise_records()
+        
+        if input("\nTest the network? (y/n) ") == "y":
+            network.load_testing_data(X_test, y_test)
+            network.normalize(set_type="testing")
+            network.test()
 
-    network.visualise_records()
-
-    '''
-    if input("\nSave weights and biases? (y/n) ") == "y":
-        network.save_parameters("weights", "biases")
-    '''
+        if input("\nSave weights and biases? (y/n) ") == "y":
+            network.save_parameters("weights", "biases")
+        
+        if input("\nInspect the network state? (y/n) ") == "y":
+            ipdb.set_trace()
 
 
 if __name__ == "__main__":
