@@ -533,52 +533,65 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-
-
-    #################### DATA COLLECTION ######################
-
-    test_name = "vanished_gradients"
-
+    
     # TEST SIZE
-    training_set_size = 20000
+    training_set_size = 60000
     testing_set_size = 10000
-
-    # NETWORK STRUCTURE
-    structure = (784, 80, 40, 10)
-    activation_function = 'sigmoid'
-    weight_initialisation = 'standard'
-
-    # HYPERPARAMETERS
-    learning_rate = 0.0001
-    momentum = None
-
-    ###########################################################
-
-
+    
     format_mnist_training(training_set_size)
     format_mnist_testing(testing_set_size)
-    # create network and load up the training data, normalise inputs (between 0 and 1)
-    network = MLP(
-        structure=structure, 
-        activation_function=activation_function,
-        weight_initialisation=weight_initialisation,
+
+    #################### DATA COLLECTION ######################
+    test = {
+        "sig_lost": {
+            "structure":                (784, 80, 40, 10),
+            "activation_function":      'sigmoid',
+            "weight_initialisation":    'standard',
+            "learning_rate":            0.0001,
+            "momentum":                 None},
+        "tanh_found": {
+            "structure":                (784, 80, 40, 10),
+            "activation_function":      'tanh',
+            "weight_initialisation":    'standard',
+            "learning_rate":            0.0001,
+            "momentum":                 None},
+        "tanh_xav": {
+            "structure":                (784, 80, 40, 10),
+            "activation_function":      'tanh',
+            "weight_initialisation":    'xavier',
+            "learning_rate":            0.0001,
+            "momentum":                 None},
+        "tanh_xav_mom": {
+            "structure":                (784, 80, 40, 10),
+            "activation_function":      'tanh',
+            "weight_initialisation":    'xavier',
+            "learning_rate":            0.0001,
+            "momentum":                 0.75}          
+    }
+    ###########################################################
+    for testname in test:
+        network = MLP(
+        structure=test[testname]["structure"], 
+        activation_function=test[testname]["activation_function"],
+        weight_initialisation=test[testname]["weight_initialisation"],
         weight_path=None, 
         bias_path=None)
 
-    network.load_training_data(X_train, y_train)
-    network.normalize(min=0, max=1, set_type='training')
+        network.load_training_data(X_train, y_train)
+        network.normalize(min=0, max=1, set_type='training')
 
-    network.load_testing_data(X_test, y_test)
-    network.normalize(min=0, max=1, set_type="testing")
+        network.load_testing_data(X_test, y_test)
+        network.normalize(min=0, max=1, set_type="testing")
 
-    network.train(
-        learning_rate=learning_rate,
-        momentum=momentum, 
-        verbose=True, 
-        record=True)
+        network.train(
+            learning_rate=test[testname]["learning_rate"],
+            momentum=test[testname]["momentum"], 
+            verbose=True, 
+            record=True)
 
-    network.save_parameters((test_name + "_weights"), (test_name + "_biases"))
-    network.save_records(test_name + "_records")
+        network.save_parameters((testname + "_weights"), (testname + "_biases"))
+        network.save_records(testname + "_records")
+
 
     '''
     if input("\nVisualise records? (y/n) ") == "y":
