@@ -16,6 +16,7 @@ class MLP:
         self.structure = structure
         self.activation_function = activation_function
         self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
+        self.tested = False
 
         # the accumulator needs a zero initialisation to work on the first training example
         self.weight_accumulator = 0
@@ -62,6 +63,32 @@ class MLP:
         self.activation_gradient = np.array(activation_gradient)
 
 
+    def save_records(self, records_filename):
+        test_set_size, mean_error, percent_correct = (len(self.X_test), *self.test(internal_call=True)) if self.tested else (0, 0, 0)
+
+        self.records_metadata = pd.DataFrame({
+            "training_iterations": [len(self.X_train)],
+            "learning_rate": [self.learning_rate],
+            "momentum": [self.momentum],
+            "test_set_size": [test_set_size],
+            "accuracy": [percent_correct],
+            "mean_error": [mean_error]
+        })
+        
+        records_path = str(self.structure) + "/" + records_filename + ".csv"
+        records_metadata_path = str(self.structure) + "/" + records_filename + "_metadata.csv"
+
+        try:
+            self.record.to_csv(records_path, index=False)
+            self.records_metadata.to_csv(records_metadata_path, index=False)
+        except FileNotFoundError:
+            import os
+            os.mkdir(str(self.structure))
+ 
+            self.record.to_csv(records_path, index=False)
+            self.records_metadata.to_csv(records_metadata_path, index=False)
+
+
     def train(self, learning_rate, momentum=None, verbose=True, record=True, batch_size=None):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -103,12 +130,13 @@ class MLP:
         self.record = pd.DataFrame(self.record) if record else None
 
 
-    def test(self):
+    def test(self, internal_call=False): 
+        self.tested = True
+        
         total_tests = len(self.X_test)
         correct_tests = 0
         total_error = 0
 
-        
         for x in range(len(X_test)-1):
             self._feed_forward(x, test_set=self.X_test)
             self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_test[x])
@@ -121,24 +149,27 @@ class MLP:
         mean_error = total_error / total_tests
         percent_correct = (correct_tests / total_tests) * 100
 
-        print(f"\nMean error: {mean_error}")
-        print(f"Percent accurate: {percent_correct}")
+        if (internal_call == False):
+            print(f"\nMean error: {mean_error}")
+            print(f"Percent accurate: {percent_correct}")
+
+        return (mean_error, percent_correct)
 
 
-    def normalize(self, set_type="training"):
+    def normalize(self, min=0, max=1, set_type='training'):
         
         # replaces the existing inputs with inputs between the range of 0 and 1 by dividing by given range
         if set_type == "training":
             set_minimum = np.min(self.X_train)
             set_range = np.ptp(self.X_train)
 
-            self.X_train = (self.X_train - set_minimum) / set_range
+            self.X_train = ((self.X_train - set_minimum) / set_range) * (max - min) + min
 
         elif set_type == "testing":
             set_minimum = np.min(self.X_train)
             set_range = np.ptp(self.X_train)
 
-            self.X_test = (self.X_test - set_minimum) / set_range
+            self.X_test = ((self.X_test - set_minimum) / set_range) * (max - min) + min
 
 
     def load_training_data(self, X_train, y_train):
@@ -151,9 +182,19 @@ class MLP:
         self.X_test, self.y_test = (X_test, y_test)
 
 
-    def save_parameters(self, weight_path, bias_path):
-        np.save(weight_path, self.weight)
-        np.save(bias_path, self.bias)
+    def save_parameters(self, weight_filename, bias_filename):
+        weight_path = str(self.structure) + "/" + weight_filename
+        bias_path = str(self.structure) + "/" + bias_filename
+
+        try:
+            np.save(weight_path, self.weight)
+            np.save(bias_path, self.bias)
+        except FileNotFoundError:
+            import os
+            os.mkdir(str(self.structure))
+
+            np.save(weight_path, self.weight)
+            np.save(bias_path, self.bias)
 
 
     def _feed_forward(self, index, test_set=None):
@@ -356,10 +397,6 @@ class MLP:
         plt.legend()
         plt.title(f"Training network with structure {self.structure} \nwith learning rate {self.learning_rate} over {len(self.X_train)} iterations\n with {self.momentum} momentum")
         plt.show()
-    
-
-    def save_records(self, filename):
-        self.record.to_csv(filename)
 
 
     def _speak(self, iteration):
@@ -480,45 +517,50 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(800)
+    format_mnist_training(100)
     format_mnist_testing(10000)
-
     
+    structure = (784, 16, 16, 10)
+
     # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP(
-        structure=(784, 200, 80, 10), 
+        structure=structure, 
         activation_function='tanh',
         weight_path=None, 
         bias_path=None)
 
     network.load_training_data(X_train, y_train)
-    network.normalize(set_type="training")
+    network.normalize(min=0, max=1, set_type='training')
+
+    network.load_testing_data(X_test, y_test)
+    network.normalize(min=0, max=1, set_type="testing")
 
     network.train(
         learning_rate=0.001,
-        momentum=0.6, 
+        momentum=0.75, 
         verbose=True, 
         record=True)
 
-    '''
     if input("\nVisualise records? (y/n) ") == "y":
         network.visualise_records()
     
     if input("\nTest the network? (y/n) ") == "y":
         network.load_testing_data(X_test, y_test)
-        network.normalize(set_type="testing")
+        network.normalize(min=0, max=1, set_type="testing")
         network.test()
-    '''
-    network.visualise_records()
-
-    network.load_testing_data(X_test, y_test)
-    network.normalize(set_type="testing")
-    network.test()
-
-    if input("\nSave weights and biases? (y/n) ") == "y":
-        network.save_parameters("weights", "biases")
     
-    if input("\nInspect the network state? (y/n) ") == "y":
+
+    if input("\nSave parameters? (y/n) ") == "y":
+        weight_filename = input("Enter the weights filename: ")
+        bias_filename = input("Enter the biases filename: ")
+
+        network.save_parameters(weight_filename, bias_filename)
+   
+    if input("\nSave records? (y/n) ") == "y":
+        records_filename = input("Enter the records filename: ")
+        network.save_records(records_filename)
+
+    if input("\nInspect network state? (y/n) ") == "y":
         ipdb.set_trace()
 
 
