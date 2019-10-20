@@ -12,11 +12,11 @@ warnings.filterwarnings("error")
 
 class MLP:
 
-    def __init__(self, structure, activation_function, weight_path=None, bias_path=None):
+    def __init__(self, structure, activation_function, weight_initialisation="standard", weight_path=None, bias_path=None):
         self.structure = structure
         self.activation_function = activation_function
+        self.weight_initialisation = weight_initialisation
         self.NUMBER_OF_LAYERS = len(structure)-1  # (excluding input)
-        self.tested = False
 
         # the accumulator needs a zero initialisation to work on the first training example
         self.weight_accumulator = 0
@@ -42,7 +42,12 @@ class MLP:
 
                     # using Xavier weight initialisation in congruence with the tanh activation function
                     # weight.append(np.random.uniform(low=-(1/np.sqrt(structure[i-1])), high=(1/np.sqrt(structure[i-1])), size=(structure[i], structure[i-1])))
-                    weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])) * np.sqrt(1 / structure[i-1]) )
+                    if (weight_initialisation == "standard"):
+                        weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])))
+                    elif (weight_initialisation == "xavier"):
+                        weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])) * np.sqrt(1 / structure[i-1]))
+                    else:
+                        weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])))
                     # weight.append(np.random.normal(loc=0, scale=0, size=(structure[i], structure[i-1])) * np.sqrt(6 / structure[i-1] + structure[i]) )
                 
                 if bias_path == None:
@@ -64,14 +69,20 @@ class MLP:
 
 
     def save_records(self, records_filename):
-        test_set_size, mean_error, percent_correct = (len(self.X_test), *self.test(internal_call=True)) if self.tested else (0, 0, 0)
+        try:
+            test_set_size, accuracy, mean_error = self.test(internal_call=True)
+        except FileNotFoundError:
+            test_set_size, accuracy, mean_error = (0, 0, 0)
 
         self.records_metadata = pd.DataFrame({
+            "structure": str(self.structure),
+            "activation_function": self.activation_function,
+            "weight_initialisation": self.weight_initialisation,
             "training_iterations": [len(self.X_train)],
             "learning_rate": [self.learning_rate],
             "momentum": [self.momentum],
             "test_set_size": [test_set_size],
-            "accuracy": [percent_correct],
+            "accuracy": [accuracy],
             "mean_error": [mean_error]
         })
         
@@ -131,14 +142,13 @@ class MLP:
 
 
     def test(self, internal_call=False): 
-        self.tested = True
         
         total_tests = len(self.X_test)
         correct_tests = 0
         total_error = 0
 
         for x in range(len(X_test)-1):
-            self._feed_forward(x, test_set=self.X_test)
+            self._feed_forward(x, test_set=True)
             self._mean_sum_squared_errors(self.activation[self.NUMBER_OF_LAYERS], self.y_test[x])
 
             total_error += self.error
@@ -148,12 +158,14 @@ class MLP:
 
         mean_error = total_error / total_tests
         percent_correct = (correct_tests / total_tests) * 100
-
+ 
         if (internal_call == False):
-            print(f"\nMean error: {mean_error}")
-            print(f"Percent accurate: {percent_correct}")
+            print(f"\nTest set size: {total_tests}")
+            print(f"Accuracy: {percent_correct}")
+            print(f"Mean error: {mean_error}")
+            
 
-        return (mean_error, percent_correct)
+        return (total_tests, percent_correct, mean_error)
 
 
     def normalize(self, min=0, max=1, set_type='training'):
@@ -166,8 +178,8 @@ class MLP:
             self.X_train = ((self.X_train - set_minimum) / set_range) * (max - min) + min
 
         elif set_type == "testing":
-            set_minimum = np.min(self.X_train)
-            set_range = np.ptp(self.X_train)
+            set_minimum = np.min(self.X_test)
+            set_range = np.ptp(self.X_test)
 
             self.X_test = ((self.X_test - set_minimum) / set_range) * (max - min) + min
 
@@ -197,8 +209,8 @@ class MLP:
             np.save(bias_path, self.bias)
 
 
-    def _feed_forward(self, index, test_set=None):
-        self.activation[0] = self.X_train[index] if test_set is None else test_set[index]
+    def _feed_forward(self, index, test_set=False):
+        self.activation[0] = self.X_train[index] if test_set is False else self.X_test[index]
 
         for i in range(0, self.NUMBER_OF_LAYERS):  # loop from the first layer to the one before the last (as I will calc activation of next layer)
             # the current weighted sums equal the matrix multiplication of the weights and activations
@@ -210,7 +222,11 @@ class MLP:
 
     def _activate(self, x, type='tanh'):
         if type == 'sigmoid':
-            return 1 / (1 + np.exp(-x))
+            try:
+                return 1 / (1 + np.exp(-x))
+            except RuntimeWarning:
+                ipdb.set_trace()
+                return 1 / (1 + np.exp(-x))
         elif type == 'tanh':
             return np.tanh(x)
         elif type == 'softsign':
@@ -517,15 +533,35 @@ def main():
         for label, output in zip(y_test_labels, y_test):
             output[label, 0] = 1
     
-    format_mnist_training(100)
-    format_mnist_testing(10000)
-    
-    structure = (784, 16, 16, 10)
 
+
+    #################### DATA COLLECTION ######################
+
+    test_name = "vanished_gradients"
+
+    # TEST SIZE
+    training_set_size = 20000
+    testing_set_size = 10000
+
+    # NETWORK STRUCTURE
+    structure = (784, 80, 40, 10)
+    activation_function = 'sigmoid'
+    weight_initialisation = 'standard'
+
+    # HYPERPARAMETERS
+    learning_rate = 0.0001
+    momentum = None
+
+    ###########################################################
+
+
+    format_mnist_training(training_set_size)
+    format_mnist_testing(testing_set_size)
     # create network and load up the training data, normalise inputs (between 0 and 1)
     network = MLP(
         structure=structure, 
-        activation_function='tanh',
+        activation_function=activation_function,
+        weight_initialisation=weight_initialisation,
         weight_path=None, 
         bias_path=None)
 
@@ -536,11 +572,15 @@ def main():
     network.normalize(min=0, max=1, set_type="testing")
 
     network.train(
-        learning_rate=0.001,
-        momentum=0.75, 
+        learning_rate=learning_rate,
+        momentum=momentum, 
         verbose=True, 
         record=True)
 
+    network.save_parameters((test_name + "_weights"), (test_name + "_biases"))
+    network.save_records(test_name + "_records")
+
+    '''
     if input("\nVisualise records? (y/n) ") == "y":
         network.visualise_records()
     
@@ -550,7 +590,7 @@ def main():
         network.test()
     
 
-    if input("\nSave parameters? (y/n) ") == "y":
+    if input("\nEnter the weights filename: ") == "y":
         weight_filename = input("Enter the weights filename: ")
         bias_filename = input("Enter the biases filename: ")
 
@@ -562,6 +602,7 @@ def main():
 
     if input("\nInspect network state? (y/n) ") == "y":
         ipdb.set_trace()
+    '''
 
 
 if __name__ == "__main__":
