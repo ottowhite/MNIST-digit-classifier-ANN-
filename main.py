@@ -43,11 +43,11 @@ class MLP:
                     # using Xavier weight initialisation in congruence with the tanh activation function
                     # weight.append(np.random.uniform(low=-(1/np.sqrt(structure[i-1])), high=(1/np.sqrt(structure[i-1])), size=(structure[i], structure[i-1])))
                     if (weight_initialisation == "standard"):
-                        weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])))
+                        weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])))
                     elif (weight_initialisation == "xavier"):
                         weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])) * np.sqrt(1 / structure[i-1]))
                     else:
-                        weight.append(np.random.normal(loc=0, scale=1, size=(structure[i], structure[i-1])))
+                        weight.append(np.random.uniform(low=-1, high=1, size=(structure[i], structure[i-1])))
                     # weight.append(np.random.normal(loc=0, scale=0, size=(structure[i], structure[i-1])) * np.sqrt(6 / structure[i-1] + structure[i]) )
                 
                 if bias_path == None:
@@ -243,7 +243,7 @@ class MLP:
 
 
     def _mean_sum_squared_errors(self, output, desired):  # finds mean sum of the squared errors w/ outputs from feedforward and desired
-        self.error = (np.sum(a=pow((output-desired), 2), axis=0) / 10)[0]
+        self.error = (np.sum(a=pow((output-desired), 2), axis=0) / self.structure[-1])[0]
 
 
     def _reset_activation_gradients(self):
@@ -543,30 +543,14 @@ def main():
 
     #################### DATA COLLECTION ######################
     test = {
-        "sig_lost": {
-            "structure":                (784, 80, 40, 10),
-            "activation_function":      'sigmoid',
-            "weight_initialisation":    'standard',
-            "learning_rate":            0.0001,
-            "momentum":                 None},
-        "tanh_found": {
-            "structure":                (784, 80, 40, 10),
-            "activation_function":      'tanh',
-            "weight_initialisation":    'standard',
-            "learning_rate":            0.0001,
-            "momentum":                 None},
-        "tanh_xav": {
+        "tanh_xav_mom_epoch4": {
             "structure":                (784, 80, 40, 10),
             "activation_function":      'tanh',
             "weight_initialisation":    'xavier',
-            "learning_rate":            0.0001,
-            "momentum":                 None},
-        "tanh_xav_mom": {
-            "structure":                (784, 80, 40, 10),
-            "activation_function":      'tanh',
-            "weight_initialisation":    'xavier',
-            "learning_rate":            0.0001,
-            "momentum":                 0.75}          
+            "weight_path":              '(784, 80, 40, 10)/tanh_xav_mom_epoch3_weights.npy',
+            "bias_path":                '(784, 80, 40, 10)/tanh_xav_mom_epoch3_biases.npy',
+            "learning_rate":            0.0002,
+            "momentum":                 0.65}
     }
     ###########################################################
     for testname in test:
@@ -574,8 +558,8 @@ def main():
         structure=test[testname]["structure"], 
         activation_function=test[testname]["activation_function"],
         weight_initialisation=test[testname]["weight_initialisation"],
-        weight_path=None, 
-        bias_path=None)
+        weight_path=test[testname]["weight_path"], 
+        bias_path=test[testname]["bias_path"])
 
         network.load_training_data(X_train, y_train)
         network.normalize(min=0, max=1, set_type='training')
@@ -589,8 +573,10 @@ def main():
             verbose=True, 
             record=True)
 
+
         network.save_parameters((testname + "_weights"), (testname + "_biases"))
         network.save_records(testname + "_records")
+
 
 
     '''
